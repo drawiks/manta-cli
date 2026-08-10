@@ -1,0 +1,131 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"sort"
+	"strings"
+
+	"github.com/dotabuff/manta"
+)
+
+// dumpEntityFields parses the replay and prints every field of the
+// CDOTA_PlayerResource entity and of the CDOTA_DataRadiant/CDOTA_DataDire
+// team-data entities to w (spike, spec §8.7). Output goes to stderr so stdout
+// stays reserved for JSON.
+func dumpEntityFields(path string, w io.Writer) int {
+	r, closer, err := openReader(path)
+	if err != nil {
+		fmt.Fprintf(w, "error: %v\n", err)
+		return 1
+	}
+	return dumpStream(r, closer, w)
+}
+
+// dumpStdin parses a replay stream read from r and dumps the entity fields
+// to w.
+func dumpStdin(r io.Reader, w io.Writer) int {
+	reader, closer, err := decompressReader(r)
+	if err != nil {
+		fmt.Fprintf(w, "error: %v\n", err)
+		return 1
+	}
+	return dumpStream(reader, closer, w)
+}
+
+// dumpStream parses a replay stream and dumps its entity fields to w.
+func dumpStream(r io.Reader, closer io.Closer, w io.Writer) int {
+	if closer != nil {
+		defer closer.Close()
+	}
+
+	p, err := manta.NewStreamParser(r)
+	if err != nil {
+		fmt.Fprintf(w, "error: %v\n", err)
+		return 1
+	}
+
+	var pr *manta.Entity
+	teams := make(map[string]*manta.Entity)
+	heroes := make(map[string]*manta.Entity)
+	p.OnEntity(func(e *manta.Entity, op manta.EntityOp) error {
+		if !op.Flag(manta.EntityOpEntered) {
+			return nil
+		}
+		switch {
+		case e.GetClassName() == prClass:
+			pr = e
+		case e.GetClassName() == dataTeamRadiantClass || e.GetClassName() == dataTeamDireClass:
+			teams[e.GetClassName()] = e
+		case strings.HasPrefix(e.GetClassName(), heroClassPrefix):
+			heroes[e.GetClassName()] = e
+		}
+		return nil
+	})
+
+	if err := p.Start(); err != nil {
+		fmt.Fprintf(w, "error: %v\n", err)
+		return 1
+	}
+
+	if pr == nil {
+		fmt.Fprintln(w, "error: CDOTA_PlayerResource not found")
+		return 1
+	}
+
+	dumpSortedMap(w, pr.Map())
+	for _, cls := range []string{dataTeamRadiantClass, dataTeamDireClass} {
+		fmt.Fprintf(w, "\n[%s]\n", cls)
+		if e, ok := teams[cls]; ok {
+			dumpSortedMap(w, e.Map())
+		} else {
+			fmt.Fprintln(w, "(not found)")
+		}
+	}
+
+	// Hero entities: handle + playerID per class (last entered; usually the
+	// real hero, illusions share the class name).
+	fmt.Fprintln(w, "\n[heroes]")
+	hk := make([]string, 0, len(heroes))
+	for c := range heroes {
+		hk = append(hk, c)
+	}
+	sort.Strings(hk)
+	for _, c := range hk {
+		e := heroes[c]
+		// m_iPlayerID is uint32 and m_iTeamNum uint8 on the wire on current
+		// patches; GetInt32 would silently return 0, so both are read with
+		// width-agnostic helpers. m_iTeamSlot does not exist on hero entities
+		// (it lives in the PlayerResource team data), so it is not printed.
+		pid := playerIDOf(e)
+		team := 0
+		if v, ok := e.GetInt32("m_iTeamNum"); ok {
+			team = int(v)
+		} else if v, ok := e.GetUint32("m_iTeamNum"); ok {
+			team = int(v)
+		}
+		fmt.Fprintf(w, "%s  handle=0x%x  m_iPlayerID=%d  m_iTeamNum=%d\n",
+			c, handleOf(e), pid, team)
+	}
+
+	if len(hk) > 0 {
+		fmt.Fprintf(w, "\n[hero map: %s]\n", hk[0])
+		for _, k := range []string{"m_iPlayerID", "m_iEconSpecifyingPlayerID", "m_nPlayerOwnerID", "m_iIsControllableByPlayer64"} {
+			fmt.Fprintf(w, "%s [map type=%T]\n", k, heroes[hk[0]].Map()[k])
+		}
+		dumpSortedMap(w, heroes[hk[0]].Map())
+	}
+	return 0
+}
+
+// dumpSortedMap prints map entries ordered by key (deterministic output).
+func dumpSortedMap(w io.Writer, m map[string]interface{}) {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Fprintf(w, "%s = %v\n", k, m[k])
+	}
+}
