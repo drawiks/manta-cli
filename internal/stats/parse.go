@@ -1,4 +1,4 @@
-package main
+package stats
 
 import (
 	"bufio"
@@ -60,7 +60,7 @@ func decompressReader(r io.Reader) (io.Reader, io.Closer, error) {
 
 // openReader opens the replay file, transparently decompressing zstd and
 // bzip2 streams. Nothing is written to disk.
-func openReader(path string) (io.Reader, io.Closer, error) {
+func OpenReader(path string) (io.Reader, io.Closer, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, nil, err
@@ -289,8 +289,8 @@ func int32OrUint32(e *manta.Entity, name string) (int32, bool) {
 // parseReplay parses a single replay file and returns the aggregated result.
 // When no match id can be derived from the filename it falls back to the
 // replay's own CDemoFileInfo metadata.
-func parseReplay(path string) (*Result, error) {
-	r, closer, err := openReader(path)
+func ParseReplay(path string) (*Result, error) {
+	r, closer, err := OpenReader(path)
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +300,7 @@ func parseReplay(path string) (*Result, error) {
 // parseStdin parses a replay stream read from r. The format is detected from
 // the magic bytes; the match id can only come from the replay's CDemoFileInfo
 // metadata.
-func parseStdin(r io.Reader) (*Result, error) {
+func ParseStdin(r io.Reader) (*Result, error) {
 	reader, closer, err := decompressReader(r)
 	if err != nil {
 		return nil, err

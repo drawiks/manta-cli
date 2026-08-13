@@ -1,4 +1,4 @@
-package main
+package stats
 
 import (
 	"math"
@@ -32,6 +32,7 @@ type xpStats struct {
 	towerDamage  int64
 	healing      float64
 	stunDuration float64
+	stunByInf    map[string]float64
 	heroDamage   int64
 	damageTaken  int64
 	goldTotal    int64
@@ -44,6 +45,10 @@ type xpStats struct {
 	// (spec §6.5), paired by index with the hero entity's m_flRespawnTime
 	// values to compute time_dead.
 	deathClocks []float32
+
+	// disable tracks fear/hex/sleep/root modifier time for supplemental
+	// stun_duration (see disable.go).
+	disable disableTrack
 }
 
 // slotStats binds a PlayerResource slot index (0..9, the PLAYERSTATS target)
@@ -182,9 +187,19 @@ func (a *aggregator) handleCombatLog(e *dota.CMsgDOTACombatLogEntry, tick uint32
 			a.xp(e.GetAttackerName()).healing += float64(e.GetValue())
 		}
 
-	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_ADD:
-		if stun := e.GetStunDuration(); stun > 0 {
-			a.xp(e.GetAttackerName()).stunDuration += float64(stun)
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_ADD,
+		dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_REMOVE:
+		a.trackModifierDisable(e)
+		if e.GetType() == dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_ADD {
+			if stun := e.GetStunDuration(); stun > 0 {
+				x := a.xp(e.GetAttackerName())
+				x.stunDuration += float64(stun)
+				if a.lookup != nil {
+					if name, ok := a.lookup("CombatLogNames", int32(e.GetInflictorName())); ok && name != "" {
+						x.addStunInf(name, float64(stun))
+					}
+				}
+			}
 		}
 
 	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_DEATH:
@@ -469,7 +484,7 @@ func buildPlayer(a *aggregator, slot prSlot, heroes map[uint64]heroInfo, teams t
 		DamageTaken:  xp.damageTaken,
 		TowerDamage:  xp.towerDamage,
 		TimeDead:     shortestFloat32(a.timeDead(slot.heroHandle, ss.xpID, uint32(slotIdx))),
-		StunDuration: xp.stunDuration,
+		StunDuration: shortestFloat32(totalStunDuration(xp.stunDuration, xp.disable)),
 		GoldWards:    xp.goldWards,
 		GoldSmoke:    xp.goldSmoke,
 		GoldDust:     xp.goldDust,
@@ -514,7 +529,7 @@ func buildPlayer(a *aggregator, slot prSlot, heroes map[uint64]heroInfo, teams t
 				p.TowerDamage = int64(td.towerDamage)
 			}
 			if td.stuns >= 0 {
-				p.StunDuration = shortestFloat32(td.stuns)
+				p.StunDuration = shortestFloat32(totalStunDuration(td.stuns, xp.disable))
 			}
 			if td.runePickups >= 0 {
 				p.RunePickups = int32(td.runePickups)
@@ -549,7 +564,28 @@ func buildPlayer(a *aggregator, slot prSlot, heroes map[uint64]heroInfo, teams t
 		p.GPM = gpm
 		p.XPM = xpm
 	}
+
+	stunBase := xp.stunDuration
+	stunScoreboard := false
+	if haveTD && td.score && td.stuns >= 0 {
+		stunBase = td.stuns
+		stunScoreboard = true
+	}
+	p.StunSources = buildStunSources(stunBuildInput{
+		base:       stunBase,
+		scoreboard: stunScoreboard,
+		stunByInf:  xp.stunByInf,
+		disable:    xp.disable,
+	})
 	return p
+}
+
+// totalStunDuration combines m_fStuns with paired ADD→REMOVE supplemental credit.
+// Paired REMOVE elapsed is summed only when a matching hero-target ADD exists.
+// Silence without ADD stun_duration uses full paired uptime; other disables use
+// paired elapsed minus ADD stun credit (when present).
+func totalStunDuration(base float64, d disableTrack) float64 {
+	return base + d.supplementalDisable()
 }
 
 // shortestFloat32 collapses a float64 that originated from a float32 field to

@@ -1,4 +1,4 @@
-package main
+package stats
 
 import (
 	"encoding/json"
@@ -210,7 +210,7 @@ func TestAggregateGoldenJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	golden, err := os.ReadFile("testdata/golden.json")
+	golden, err := os.ReadFile("../../tests/testdata/golden.json")
 	if err != nil {
 		t.Fatal(err)
 	}

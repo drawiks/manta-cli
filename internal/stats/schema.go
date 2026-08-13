@@ -1,4 +1,4 @@
-package main
+package stats
 
 // Result is the top-level JSON object emitted to stdout.
 type Result struct {
@@ -28,13 +28,21 @@ type Player struct {
 	HeroDamage    int64   `json:"hero_damage"`
 	DamageTaken   int64   `json:"damage_taken"`
 	TowerDamage   int64   `json:"tower_damage"`
-	TimeDead      float64 `json:"time_dead"`
-	StunDuration  float64 `json:"stun_duration"`
-	GoldWards     int64   `json:"gold_spent_wards"`
+	TimeDead      float64      `json:"time_dead"`
+	StunDuration  float64      `json:"stun_duration"`
+	StunSources   []StunSource `json:"stun_sources,omitempty"`
+	GoldWards     int64        `json:"gold_spent_wards"`
 	GoldSmoke     int64   `json:"gold_spent_smoke"`
 	GoldDust      int64   `json:"gold_spent_dust"`
 	CampsStacked  int64   `json:"camps_stacked"`
 	CreepsStacked int64   `json:"creeps_stacked"`
 	RunePickups   int32   `json:"rune_pickups"`
 	FirstBlood    bool    `json:"first_blood"`
+}
+
+// StunSource is one line of stun_duration attribution (modifier / scoreboard).
+type StunSource struct {
+	Inflictor string  `json:"inflictor"`
+	Category  string  `json:"category"`
+	Seconds   float64 `json:"seconds"`
 }

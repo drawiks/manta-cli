@@ -167,14 +167,17 @@ Field order is fixed; `match_id` is omitted when unknown (0).
 
 ## Tests
 
-Synthetic fixtures exercise the aggregation and the JSON contract against a
-golden file; CLI exit codes (including the `--stdin` mode) are covered
-separately. When the repo's replay fixtures are present, integration tests
-also push a real `.dem` through stdin and check the `match_id` fallback:
+Layout:
+
+- `internal/stats/*_test.go` — unit tests (aggregation, disable classification, golden JSON)
+- `tests/cli/` — CLI exit codes and stdin mode
+- `tests/replay/` — replay integration and stun regressions (`tests/replays/` fixtures)
 
 ```sh
 go test ./...
 ```
+
+When replay fixtures are present under `tests/replays/`, integration tests parse real `.dem` files and check stun regressions.
 
 ## License
 

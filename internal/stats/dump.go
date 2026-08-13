@@ -1,4 +1,4 @@
-package main
+package stats
 
 import (
 	"fmt"
@@ -9,12 +9,12 @@ import (
 	"github.com/dotabuff/manta"
 )
 
-// dumpEntityFields parses the replay and prints every field of the
+// DumpEntityFields parses the replay and prints every field of the
 // CDOTA_PlayerResource entity and of the CDOTA_DataRadiant/CDOTA_DataDire
 // team-data entities to w (spike, spec §8.7). Output goes to stderr so stdout
 // stays reserved for JSON.
-func dumpEntityFields(path string, w io.Writer) int {
-	r, closer, err := openReader(path)
+func DumpEntityFields(path string, w io.Writer) int {
+	r, closer, err := OpenReader(path)
 	if err != nil {
 		fmt.Fprintf(w, "error: %v\n", err)
 		return 1
@@ -22,9 +22,8 @@ func dumpEntityFields(path string, w io.Writer) int {
 	return dumpStream(r, closer, w)
 }
 
-// dumpStdin parses a replay stream read from r and dumps the entity fields
-// to w.
-func dumpStdin(r io.Reader, w io.Writer) int {
+// DumpStdin parses a replay stream read from r and dumps the entity fields to w.
+func DumpStdin(r io.Reader, w io.Writer) int {
 	reader, closer, err := decompressReader(r)
 	if err != nil {
 		fmt.Fprintf(w, "error: %v\n", err)
@@ -33,7 +32,6 @@ func dumpStdin(r io.Reader, w io.Writer) int {
 	return dumpStream(reader, closer, w)
 }
 
-// dumpStream parses a replay stream and dumps its entity fields to w.
 func dumpStream(r io.Reader, closer io.Closer, w io.Writer) int {
 	if closer != nil {
 		defer closer.Close()
@@ -83,8 +81,6 @@ func dumpStream(r io.Reader, closer io.Closer, w io.Writer) int {
 		}
 	}
 
-	// Hero entities: handle + playerID per class (last entered; usually the
-	// real hero, illusions share the class name).
 	fmt.Fprintln(w, "\n[heroes]")
 	hk := make([]string, 0, len(heroes))
 	for c := range heroes {
@@ -93,10 +89,6 @@ func dumpStream(r io.Reader, closer io.Closer, w io.Writer) int {
 	sort.Strings(hk)
 	for _, c := range hk {
 		e := heroes[c]
-		// m_iPlayerID is uint32 and m_iTeamNum uint8 on the wire on current
-		// patches; GetInt32 would silently return 0, so both are read with
-		// width-agnostic helpers. m_iTeamSlot does not exist on hero entities
-		// (it lives in the PlayerResource team data), so it is not printed.
 		pid := playerIDOf(e)
 		team := 0
 		if v, ok := e.GetInt32("m_iTeamNum"); ok {
@@ -118,7 +110,6 @@ func dumpStream(r io.Reader, closer io.Closer, w io.Writer) int {
 	return 0
 }
 
-// dumpSortedMap prints map entries ordered by key (deterministic output).
 func dumpSortedMap(w io.Writer, m map[string]interface{}) {
 	keys := make([]string, 0, len(m))
 	for k := range m {

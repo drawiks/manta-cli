@@ -24,6 +24,13 @@
       "tower_damage": 800,
       "time_dead": 0,
       "stun_duration": 1.5,
+      "stun_sources": [
+        {
+          "inflictor": "combat_log",
+          "category": "stun",
+          "seconds": 1.5
+        }
+      ],
       "gold_spent_wards": 0,
       "gold_spent_smoke": 0,
       "gold_spent_dust": 0,
