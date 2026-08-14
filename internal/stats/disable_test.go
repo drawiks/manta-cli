@@ -187,6 +187,8 @@ func TestSupplementalDisableSleepScaled(t *testing.T) {
 }
 
 func TestBuildStunSourcesScoreboard(t *testing.T) {
+	// A present scoreboard m_fStuns is authoritative: no supplemental ADD→REMOVE
+	// credit is layered on top, so the source list is the lump scoreboard sum.
 	src := buildStunSources(stunBuildInput{
 		base:       77.734,
 		scoreboard: true,
@@ -199,14 +201,17 @@ func TestBuildStunSourcesScoreboard(t *testing.T) {
 			},
 		},
 	})
-	if len(src) != 2 {
-		t.Fatalf("len=%d want 2", len(src))
+	if len(src) != 1 {
+		t.Fatalf("len=%d want 1 scoreboard lump source", len(src))
 	}
-	if src[0].Inflictor != "scoreboard" || src[0].Category != "stun" {
-		t.Errorf("first source = %+v", src[0])
+	if src[0].Inflictor != "scoreboard" || src[0].Category != "stun" || src[0].Seconds < 77.7 || src[0].Seconds > 77.8 {
+		t.Errorf("source = %+v", src[0])
 	}
-	if src[1].Inflictor != "naga_siren_song_of_the_siren" || src[1].Category != "sleep" {
-		t.Errorf("second source = %+v", src[1])
+}
+
+func TestBuildStunSourcesScoreboardZero(t *testing.T) {
+	if src := buildStunSources(stunBuildInput{base: 0, scoreboard: true}); src != nil {
+		t.Errorf("zero scoreboard stun = %+v, want nil", src)
 	}
 }
 

@@ -82,6 +82,14 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o man
       "tower_damage": 1800,
       "time_dead": 240.56671,
       "stun_duration": 14.3,
+      "stun_sources": [
+        { "inflictor": "axe_berserkers_call", "category": "taunt", "seconds": 5.5 }
+      ],
+      "buffs_duration": 33.0,
+      "buff_sources": [
+        { "inflictor": "dazzle_shadow_wave", "category": "heal", "value": 1234.5, "count": 12 },
+        { "inflictor": "dazzle_shallow_grave", "category": "save", "value": 33.0, "count": 7 }
+      ],
       "gold_spent_wards": 900,
       "gold_spent_smoke": 200,
       "gold_spent_dust": 80,
@@ -104,7 +112,8 @@ Field order is fixed; `match_id` is omitted when unknown (0).
   same source OpenDota/Valve's match API uses): GPM/XPM, tower damage, stun
   duration, last hits, net worth, healing, rune pickups, camps/creeps stacked.
   Per-player values are read via `m_vecDataTeam.<teamSlot>.m_*` (camps/creeps
-  stacked are team-wide and copied to every player, mirroring OpenDota).
+  stacked are per-player: each player's own row, verified against OpenDota on
+  matches where it reports `camps_stacked`).
 - GPM/XPM are computed exactly like the in-game scoreboard:
   `floor(totalEarned * 60 / gameTime)`, where the divisor is the un-truncated
   float game clock (e.g. 2463.5334) — not `duration_sec`'s truncation. This
@@ -121,6 +130,14 @@ Field order is fixed; `match_id` is omitted when unknown (0).
   (type 18) combat-log event when present and falls back to the first hero
   `DEATH` otherwise (the type-18 event carries no attacker index, so its credit
   is taken from the first hero death at/after that tick).
+- `stun_duration` is the scoreboard's `m_fStuns` when the team-data section is
+  present, and it is authoritative: it matches the in-game scoreboard and
+  OpenDota exactly (20/20 on the reference matches OpenDota exposes `stuns`
+  for). Supplemental ADD→REMOVE disable uptime (fear/sleep/root/taunt/silence/
+  break/mute/banish/leash/trap) is only added when the scoreboard section is
+  missing entirely (legacy engine-0 replays). `stun_sources` is a single
+  `scoreboard` entry on modern matches and a per-inflictor breakdown on the
+  fallback path.
 - Two combat-log id-spaces are bridged: pid (even `m_iPlayerID` of hero
   entities, also the `PLAYERSTATS` target) vs xpID (the `PLAYERSTATS` value,
   used in `attacker`/`target` of damage/heal/gold/xp events).
@@ -130,10 +147,11 @@ Field order is fixed; `match_id` is omitted when unknown (0).
   (target hero, illusions excluded). Self-inflicted damage is excluded from
   `hero_damage` but **included** in `damage_taken`, mirroring the end-game
   summary and OpenDota. `damage_taken` matches OpenDota exactly for all 10
-  players on the reference match; `hero_damage` agrees on 6/10 (reference) and
-  8/10 (engine-1 replay). The residuals (e.g. Pudge +9128, Rubick −1123) come
-  from damage sources the combat log records under a different owner
-  (illusions, stolen/reflected damage) — a documented approximation.
+  players on the reference match; `hero_damage` agrees on 6/10 (reference),
+  8/10 (engine-1 replay) and 65/70 within 10% across the modern reference
+  matches. The residuals (e.g. Pudge +9128, Rubick −1123) come from damage
+  sources the combat log records under a different owner (illusions,
+  stolen/reflected damage) — a documented approximation.
 - `time_dead` reproduces OpenDota's `life_state_dead`: for every hero `DEATH`
   it sums `min(m_flRespawnTime, buyback, postGame) − deathClock`.
   `m_flRespawnTime` never resets on buyback (it holds the scheduled respawn),
@@ -152,12 +170,37 @@ Field order is fixed; `match_id` is omitted when unknown (0).
   those, e.g. Tusk 0 vs 100 gold on the reference match).
 - `gold_spent_dust` = combat-log item-use events × 80; dust held at the end of
   the game (never used) is not counted.
-- `hero_healing` cannot be reproduced from replay data for every player: on
-  the reference match OpenDota reports healing totals (Phoenix 9440, Dazzle
-  15328, Legion Commander 259, Primal Beast 244) that match neither the
-  scoreboard's `m_fHealing` nor any sum of combat-log HEAL events (LC/PB emit
-  no heal events to other heroes at all). manta reports the scoreboard value
-  `m_fHealing`, which agrees with OpenDota on 6/10 players.
+- `healing` is the scoreboard's `m_fHealing` and matches OpenDota on 61/70
+  player values across the modern reference matches (tolerance 50 or 2%) and
+  matches Dotabuff exactly (10/10) on the reference match whose scoreboard data
+  is sound. Combat-log HEAL sums were evaluated and rejected as a fallback: raw
+  sums are dominated by lifesteal (Juggernaut 42.7k gross vs 11.5k actual) and
+  per-ability sums overcount channeled heals (Enchantress attendants 15.0k vs
+  4.0k, Winter Wyvern cold embrace 8.8k vs 5.0k) while missing heals attributed
+  to summoned units (Juggernaut's Healing Ward) and items whose heal events do
+  not fire (Spirit Vessel). On two reference replays the replay's own scoreboard
+  data is corrupted (dire team of 8941955514: Juggernaut/Ember 0, Shadow Demon
+  13.2k; 8943313464: Terrorblade 2.3k though he has no heal) — these are
+  client-side scoreboard values the replay cannot fix, and no better source
+  exists.
+- `buff_sources` (per player, `omitempty`) credits positive effects a hero cast
+  on same-team heroes, including self-casts (an ally-capable ability cast on
+  its owner is a real buff). `category` is one of `heal`, `save`, `purge`,
+  `shield`, `spell_immunity`, `invisibility`, `buff_stats`, `buff_haste`,
+  `mana_restore`; `value` is uptime seconds for duration buffs and total HP for
+  `heal`; `count` is applications / heal events. `buffs_duration` is the summed
+  uptime across all duration buffs (always present, `0` when none). Heal credit
+  comes from combat-log `HEAL` events (ability name is present on every event);
+  lifesteal/regen and enemy-target heals are excluded, self-heals count.
+  Duration buffs come from paired `MODIFIER_ADD`→`MODIFIER_REMOVE` events whose
+  `elapsed_duration` is the uptime; passive auras, hidden modifiers, pure
+  self-only buffs (e.g. Fiery Soul, Warpath) and illusion targets are excluded.
+  Caveats: only action buffs in a curated catalog are tracked (the catalog
+  lives in `internal/stats/buffs.go`); `MANA_RESTORED`/`HERO_SAVED`
+  combat-log events never fire on observed patches, so `mana_restore` is only
+  KotL chakra-magic uptime and Arcane Boots' mana grant is untrackable (its
+  modifier is self-targeted and hidden); Naga Siren's Song is a disable and
+  stays in `stun_sources`.
 - The vendored `manta` package logs parser diagnostics straight to stdout when
   the `DEBUG` (level 1) or `TRACE` (level 10) environment variables are set;
   there is no `manta.DEBUG` variable. Run the CLI with an unset environment to
@@ -165,13 +208,26 @@ Field order is fixed; `match_id` is omitted when unknown (0).
 - Replay files whose name starts with `-` (e.g. `-12345.dem`) are rejected by
   the CLI's flag parser; rename the file to parse it.
 
+### Reference-match validation (modern patches)
+
+Seven modern reference replays cross-checked against the OpenDota `/matches`
+API and Dotabuff at authoring time:
+
+| field | vs OpenDota |
+|---|---|
+| kills / deaths / assists / last_hits / level | 70/70 exact |
+| stun_duration (`m_fStuns`) | 20/20 where OpenDota exposes `stuns` |
+| healing (`m_fHealing`) | 61/70 (residuals are corrupted replay scoreboards, see above) |
+| hero_damage | 65/70 within 10% |
+| first blood | matches OpenDota where it exposes `firstblood_claimed`; the combat-log model attributes it in all matches |
+
 ## Tests
 
 Layout:
 
-- `internal/stats/*_test.go` — unit tests (aggregation, disable classification, golden JSON)
+- `internal/stats/*_test.go` — unit tests (aggregation, disable/buff classification, golden JSON)
 - `tests/cli/` — CLI exit codes and stdin mode
-- `tests/replay/` — replay integration and stun regressions (`tests/replays/` fixtures)
+- `tests/replay/` — replay integration and stun/buff regressions (`tests/replays/` fixtures)
 
 ```sh
 go test ./...

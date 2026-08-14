@@ -31,6 +31,7 @@
           "seconds": 1.5
         }
       ],
+      "buffs_duration": 0,
       "gold_spent_wards": 0,
       "gold_spent_smoke": 0,
       "gold_spent_dust": 0,
@@ -60,6 +61,7 @@
       "tower_damage": 700,
       "time_dead": 0,
       "stun_duration": 0,
+      "buffs_duration": 0,
       "gold_spent_wards": 0,
       "gold_spent_smoke": 0,
       "gold_spent_dust": 0,

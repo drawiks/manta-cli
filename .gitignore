@@ -14,7 +14,8 @@
 # Built CLI binary
 /manta_cli
 /manta_cli_arm64
-/manta-cli
+/manta_cli_linux_amd64
+/manta_cli_linux_arm64
 
 # Code coverage profiles and other test artifacts
 *.out
@@ -41,3 +42,5 @@ go.work.sum
 
 match.json
 manta.txt
+AGENTS.md
+matches/

@@ -170,99 +170,73 @@ type stunBuildInput struct {
 }
 
 func buildStunSources(in stunBuildInput) []StunSource {
+	// Scoreboard m_fStuns is authoritative: it matches the in-game scoreboard
+	// and OpenDota exactly on modern patches, so the supplemental ADD→REMOVE
+	// credits are never layered on top and no per-source breakdown exists —
+	// emit the lump sum only. The breakdown below serves patches without the
+	// scoreboard section (legacy engine-0 replays).
+	if in.scoreboard {
+		if in.base <= 0 {
+			return nil
+		}
+		return []StunSource{{
+			Inflictor: "scoreboard",
+			Category:  "stun",
+			Seconds:   shortestFloat32(in.base),
+		}}
+	}
+
 	var out []StunSource
-
-	decompose := in.scoreboard && in.base > 0 && trackedAddStun(in.disable) <= in.base+0.05
-
-	if decompose {
-		var trackedAdd float64
-		for inf, t := range in.disable.byInf {
-			credit := infCredit(t)
-			sec := disableSourceSec(t, credit)
+	switch {
+	case len(in.stunByInf) > 0:
+		for inf, sec := range in.stunByInf {
 			if sec <= 0 {
 				continue
 			}
-			if t.addStunN > 0 {
-				trackedAdd += t.addStun
-			}
-			out = append(out, StunSource{
-				Inflictor: inf,
-				Category:  catName(t.cat),
-				Seconds:   shortestFloat32(sec),
-			})
-		}
-		if rem := in.base - trackedAdd; rem > 0.01 {
-			out = append(out, StunSource{
-				Inflictor: "scoreboard",
-				Category:  "stun",
-				Seconds:   shortestFloat32(rem),
-			})
-		}
-	} else {
-		switch {
-		case in.scoreboard && in.base > 0:
-			out = append(out, StunSource{
-				Inflictor: "scoreboard",
-				Category:  "stun",
-				Seconds:   shortestFloat32(in.base),
-			})
-		case len(in.stunByInf) > 0:
-			for inf, sec := range in.stunByInf {
-				if sec <= 0 {
-					continue
-				}
-				if classifyDisable(inf) != disableNone {
-					continue
-				}
-				out = append(out, StunSource{
-					Inflictor: inf,
-					Category:  "stun",
-					Seconds:   shortestFloat32(sec),
-				})
-			}
-		case in.base > 0:
-			out = append(out, StunSource{
-				Inflictor: "combat_log",
-				Category:  "stun",
-				Seconds:   shortestFloat32(in.base),
-			})
-		}
-
-		mergeStunByInf := !in.scoreboard
-		for inf, t := range in.disable.byInf {
-			credit := infCredit(t)
-			sec := credit
-			if mergeStunByInf {
-				if extra, ok := in.stunByInf[inf]; ok {
-					sec += extra
-				}
-			} else if t.addStunN > 0 {
-				sec = disableSourceSec(t, credit)
-			}
-			if sec <= 0 {
+			if classifyDisable(inf) != disableNone {
 				continue
 			}
 			out = append(out, StunSource{
 				Inflictor: inf,
-				Category:  catName(t.cat),
+				Category:  "stun",
 				Seconds:   shortestFloat32(sec),
 			})
 		}
-		if mergeStunByInf {
-			for inf, sec := range in.stunByInf {
-				if sec <= 0 || classifyDisable(inf) == disableNone {
-					continue
-				}
-				if _, ok := in.disable.byInf[inf]; ok {
-					continue
-				}
-				out = append(out, StunSource{
-					Inflictor: inf,
-					Category:  catName(classifyDisable(inf)),
-					Seconds:   shortestFloat32(sec),
-				})
-			}
+	case in.base > 0:
+		out = append(out, StunSource{
+			Inflictor: "combat_log",
+			Category:  "stun",
+			Seconds:   shortestFloat32(in.base),
+		})
+	}
+
+	for inf, t := range in.disable.byInf {
+		credit := infCredit(t)
+		sec := credit
+		if extra, ok := in.stunByInf[inf]; ok {
+			sec += extra
 		}
+		if sec <= 0 {
+			continue
+		}
+		out = append(out, StunSource{
+			Inflictor: inf,
+			Category:  catName(t.cat),
+			Seconds:   shortestFloat32(sec),
+		})
+	}
+	for inf, sec := range in.stunByInf {
+		if sec <= 0 || classifyDisable(inf) == disableNone {
+			continue
+		}
+		if _, ok := in.disable.byInf[inf]; ok {
+			continue
+		}
+		out = append(out, StunSource{
+			Inflictor: inf,
+			Category:  catName(classifyDisable(inf)),
+			Seconds:   shortestFloat32(sec),
+		})
 	}
 
 	sort.Slice(out, func(i, j int) bool {
@@ -275,25 +249,6 @@ func buildStunSources(in stunBuildInput) []StunSource {
 		return nil
 	}
 	return out
-}
-
-func trackedAddStun(d disableTrack) float64 {
-	var sum float64
-	for _, t := range d.byInf {
-		sum += t.addStun
-	}
-	return sum
-}
-
-// disableSourceSec is paired uptime (ADD→REMOVE) attributed to one inflictor line.
-func disableSourceSec(t *infTrack, credit float64) float64 {
-	if credit <= 0 {
-		return 0
-	}
-	if t.addStunN > 0 {
-		return t.addStun + credit
-	}
-	return credit
 }
 
 func classifyDisable(inflictor string) disableCat {

@@ -49,6 +49,16 @@ type xpStats struct {
 	// disable tracks fear/hex/sleep/root modifier time for supplemental
 	// stun_duration (see disable.go).
 	disable disableTrack
+
+	// buff tracks positive effects applied to allies: duration-based modifier
+	// uptime (buffs.go) plus ally heals, which the combat log attributes per
+	// ability via HEAL events. Heal amounts and counts are kept per ability
+	// for buff_sources attribution.
+	buff         buffTrack
+	buffHeal     float64
+	buffHealN    int
+	buffHealInf  map[string]float64
+	buffHealInfN map[string]int
 }
 
 // slotStats binds a PlayerResource slot index (0..9, the PLAYERSTATS target)
@@ -186,10 +196,12 @@ func (a *aggregator) handleCombatLog(e *dota.CMsgDOTACombatLogEntry, tick uint32
 		if e.GetIsTargetHero() {
 			a.xp(e.GetAttackerName()).healing += float64(e.GetValue())
 		}
+		a.trackAllyHeal(e)
 
 	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_ADD,
 		dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_REMOVE:
 		a.trackModifierDisable(e)
+		a.trackModifierBuff(e)
 		if e.GetType() == dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_ADD {
 			if stun := e.GetStunDuration(); stun > 0 {
 				x := a.xp(e.GetAttackerName())
@@ -388,8 +400,8 @@ type heroInfo struct {
 }
 
 // teamData is the per-team snapshot taken from the CDOTA_DataRadiant/Dire
-// entities. CampsStacked and CreepsStacked are team stats, so every player of
-// a team reports the same value, mirroring OpenDota. The remaining fields are
+// entities. CampsStacked and CreepsStacked are read per player from their own
+// m_vecDataTeam.<teamSlot> row (not a team-wide counter). The remaining fields are
 // the same per-player scoreboard numbers Valve's match API (and OpenDota)
 // exposes (gold_per_min, xp_per_min, tower_damage, ...); score reports whether
 // the scoreboard section was readable so callers can fall back to the
@@ -467,28 +479,30 @@ func buildPlayer(a *aggregator, slot prSlot, heroes map[uint64]heroInfo, teams t
 	xp := a.xpStats(ss.xpID)
 
 	p := Player{
-		SteamID:      slot.steamID,
-		PlayerID:     playerID,
-		HeroID:       slot.heroID,
-		Hero:         heroes[slot.heroHandle].name,
-		Team:         teamName(slot.team),
-		Name:         slot.name,
-		Kills:        slot.kills,
-		Deaths:       slot.deaths,
-		Assists:      slot.assists,
-		Level:        slot.level,
-		LastHits:     ss.lastHits,
-		Networth:     ss.networth,
-		Healing:      shortestFloat32(xp.healing),
-		HeroDamage:   xp.heroDamage,
-		DamageTaken:  xp.damageTaken,
-		TowerDamage:  xp.towerDamage,
-		TimeDead:     shortestFloat32(a.timeDead(slot.heroHandle, ss.xpID, uint32(slotIdx))),
-		StunDuration: shortestFloat32(totalStunDuration(xp.stunDuration, xp.disable)),
-		GoldWards:    xp.goldWards,
-		GoldSmoke:    xp.goldSmoke,
-		GoldDust:     xp.goldDust,
-		RunePickups:  slot.bountyRunes + slot.powerRunes + slot.waterRunes,
+		SteamID:       slot.steamID,
+		PlayerID:      playerID,
+		HeroID:        slot.heroID,
+		Hero:          heroes[slot.heroHandle].name,
+		Team:          teamName(slot.team),
+		Name:          slot.name,
+		Kills:         slot.kills,
+		Deaths:        slot.deaths,
+		Assists:       slot.assists,
+		Level:         slot.level,
+		LastHits:      ss.lastHits,
+		Networth:      ss.networth,
+		Healing:       shortestFloat32(xp.healing),
+		HeroDamage:    xp.heroDamage,
+		DamageTaken:   xp.damageTaken,
+		TowerDamage:   xp.towerDamage,
+		TimeDead:      shortestFloat32(a.timeDead(slot.heroHandle, ss.xpID, uint32(slotIdx))),
+		StunDuration:  shortestFloat32(totalStunDuration(xp.stunDuration, xp.disable)),
+		BuffSources:   buildBuffSources(xp),
+		BuffsDuration: shortestFloat32(xp.buff.totalUptime()),
+		GoldWards:     xp.goldWards,
+		GoldSmoke:     xp.goldSmoke,
+		GoldDust:      xp.goldDust,
+		RunePickups:   slot.bountyRunes + slot.powerRunes + slot.waterRunes,
 		// FirstBlood is only claimed when a FB candidate exists (a hero death,
 		// or a hero death at/after the type-18 event). The xpID 0 guard is not
 		// used: xpID 0 is a valid id (spec §6.3), so it must be claimable.
@@ -529,7 +543,7 @@ func buildPlayer(a *aggregator, slot prSlot, heroes map[uint64]heroInfo, teams t
 				p.TowerDamage = int64(td.towerDamage)
 			}
 			if td.stuns >= 0 {
-				p.StunDuration = shortestFloat32(totalStunDuration(td.stuns, xp.disable))
+				p.StunDuration = shortestFloat32(td.stuns)
 			}
 			if td.runePickups >= 0 {
 				p.RunePickups = int32(td.runePickups)
@@ -580,7 +594,11 @@ func buildPlayer(a *aggregator, slot prSlot, heroes map[uint64]heroInfo, teams t
 	return p
 }
 
-// totalStunDuration combines m_fStuns with paired ADD→REMOVE supplemental credit.
+// totalStunDuration is the fallback for patches without the scoreboard section:
+// the combat-log stun sum plus paired ADD→REMOVE supplemental credit. Modern
+// patches expose m_fStuns, which is authoritative on its own (it matches the
+// in-game scoreboard and OpenDota exactly), so buildPlayer uses it directly and
+// never adds this supplemental credit on top.
 // Paired REMOVE elapsed is summed only when a matching hero-target ADD exists.
 // Silence without ADD stun_duration uses full paired uptime; other disables use
 // paired elapsed minus ADD stun credit (when present).

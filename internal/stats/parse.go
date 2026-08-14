@@ -171,8 +171,8 @@ func handleOf(e *manta.Entity) uint64 {
 }
 
 // mantaTeams adapts the CDOTA_DataRadiant/CDOTA_DataDire entities to the
-// teamReader interface. The team stats (camps/creeps stacked) live under
-// m_vecDataTeam.<teamSlot> and are the same for every player of a team. The
+// teamReader interface. The camps/creeps stacked counters live under
+// m_vecDataTeam.<teamSlot>, each player reading their own row. The
 // per-player scoreboard numbers (total earned gold/xp, tower damage, healing,
 // net worth, last hits, stuns, wards placed, smokes used) sit in the same
 // sub-struct and are the values Valve's match API and OpenDota report, so when
