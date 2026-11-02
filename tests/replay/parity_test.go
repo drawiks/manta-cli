@@ -1,14 +1,13 @@
 package replay_test
 
 import (
+	"context"
 	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"context"
 
 	"github.com/drawiks/manta-cli/internal/app"
 )

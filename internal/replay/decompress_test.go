@@ -30,7 +30,7 @@ func TestDecompressReaderZstd(t *testing.T) {
 	if closer == nil {
 		t.Fatal("closer should not be nil for a zstd stream")
 	}
-	defer closer.Close()
+	defer func() { _ = closer.Close() }()
 
 	got, err := io.ReadAll(r)
 	if err != nil {

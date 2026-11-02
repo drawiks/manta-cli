@@ -67,7 +67,7 @@ func OpenReader(path string) (io.Reader, io.Closer, error) {
 	}
 	r, closer, err := decompressReader(f)
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, nil, err
 	}
 	if closer != nil {
@@ -183,7 +183,7 @@ func ParseStream(ctx context.Context, r io.Reader, h events.Handler) error {
 
 func parseStream(ctx context.Context, r io.Reader, closer io.Closer, fallbackMatchID int64, h events.Handler) error {
 	if closer != nil {
-		defer closer.Close()
+		defer func() { _ = closer.Close() }()
 	}
 
 	p, err := manta.NewStreamParser(r)
@@ -779,19 +779,6 @@ func playerIDOf(e *manta.Entity) int32 {
 		return int32(v)
 	}
 	return 0
-}
-
-func int32OrUint32(e *manta.Entity, name string) (int32, bool) {
-	if e == nil {
-		return 0, false
-	}
-	if v, ok := e.GetInt32(name); ok {
-		return v, true
-	}
-	if v, ok := e.GetUint32(name); ok {
-		return int32(v), true
-	}
-	return 0, false
 }
 
 func numInt(e *manta.Entity, name string) (int, bool) {

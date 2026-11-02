@@ -107,12 +107,14 @@ func TestPrintTable(t *testing.T) {
 		DurationSec: 100,
 		RadiantWin:  true,
 		Players: []model.Player{
-			{Team: "radiant", Hero: "pudge", Name: "n", Kills: 8, Deaths: 3,
+			{
+				Team: "radiant", Hero: "pudge", Name: "n", Kills: 8, Deaths: 3,
 				Assists: 12, Level: 25, LastHits: 230, Networth: 18900,
 				GPM: 512, XPM: 640, Healing: 5200, HeroDamage: 18750,
 				DamageTaken: 12400, TimeDead: 240.5, TowerDamage: 1800,
 				StunDuration: 14.3, FirstBlood: true, RunePickups: 2,
-				GoldSpentWards: 900, GoldSpentSmoke: 200, GoldSpentDust: 80},
+				GoldSpentWards: 900, GoldSpentSmoke: 200, GoldSpentDust: 80,
+			},
 		},
 	}
 	var buf bytes.Buffer
@@ -175,7 +177,7 @@ func TestRunStdinParsesReplay(t *testing.T) {
 	if err != nil {
 		t.Skip("replay fixture not present")
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var out, errBuf bytes.Buffer
 	if code := cli.Run(context.Background(), []string{"--stdin"}, f, &out, &errBuf); code != 0 {
@@ -192,7 +194,7 @@ func TestRunStdinDumpFields(t *testing.T) {
 	if err != nil {
 		t.Skip("replay fixture not present")
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var out, errBuf bytes.Buffer
 	if code := cli.Run(context.Background(), []string{"--dump-fields", "--stdin"}, f, &out, &errBuf); code != 0 {

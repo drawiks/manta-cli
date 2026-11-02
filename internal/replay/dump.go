@@ -16,7 +16,7 @@ import (
 func DumpEntityFields(path string, w io.Writer) int {
 	r, closer, err := OpenReader(path)
 	if err != nil {
-		fmt.Fprintf(w, "error: %v\n", err)
+		_, _ = fmt.Fprintf(w, "error: %v\n", err)
 		return 1
 	}
 	return dumpStream(r, closer, w)
@@ -26,7 +26,7 @@ func DumpEntityFields(path string, w io.Writer) int {
 func DumpStdin(r io.Reader, w io.Writer) int {
 	reader, closer, err := decompressReader(r)
 	if err != nil {
-		fmt.Fprintf(w, "error: %v\n", err)
+		_, _ = fmt.Fprintf(w, "error: %v\n", err)
 		return 1
 	}
 	return dumpStream(reader, closer, w)
@@ -34,12 +34,12 @@ func DumpStdin(r io.Reader, w io.Writer) int {
 
 func dumpStream(r io.Reader, closer io.Closer, w io.Writer) int {
 	if closer != nil {
-		defer closer.Close()
+		defer func() { _ = closer.Close() }()
 	}
 
 	p, err := manta.NewStreamParser(r)
 	if err != nil {
-		fmt.Fprintf(w, "error: %v\n", err)
+		_, _ = fmt.Fprintf(w, "error: %v\n", err)
 		return 1
 	}
 
@@ -62,26 +62,26 @@ func dumpStream(r io.Reader, closer io.Closer, w io.Writer) int {
 	})
 
 	if err := p.Start(); err != nil {
-		fmt.Fprintf(w, "error: %v\n", err)
+		_, _ = fmt.Fprintf(w, "error: %v\n", err)
 		return 1
 	}
 
 	if pr == nil {
-		fmt.Fprintln(w, "error: CDOTA_PlayerResource not found")
+		_, _ = fmt.Fprintln(w, "error: CDOTA_PlayerResource not found")
 		return 1
 	}
 
 	dumpSortedMap(w, pr.Map())
 	for _, cls := range []string{dataTeamRadiantClass, dataTeamDireClass} {
-		fmt.Fprintf(w, "\n[%s]\n", cls)
+		_, _ = fmt.Fprintf(w, "\n[%s]\n", cls)
 		if e, ok := teams[cls]; ok {
 			dumpSortedMap(w, e.Map())
 		} else {
-			fmt.Fprintln(w, "(not found)")
+			_, _ = fmt.Fprintln(w, "(not found)")
 		}
 	}
 
-	fmt.Fprintln(w, "\n[heroes]")
+	_, _ = fmt.Fprintln(w, "\n[heroes]")
 	hk := make([]string, 0, len(heroes))
 	for c := range heroes {
 		hk = append(hk, c)
@@ -96,14 +96,14 @@ func dumpStream(r io.Reader, closer io.Closer, w io.Writer) int {
 		} else if v, ok := e.GetUint32("m_iTeamNum"); ok {
 			team = int(v)
 		}
-		fmt.Fprintf(w, "%s  handle=0x%x  m_iPlayerID=%d  m_iTeamNum=%d\n",
+		_, _ = fmt.Fprintf(w, "%s  handle=0x%x  m_iPlayerID=%d  m_iTeamNum=%d\n",
 			c, handleOf(e), pid, team)
 	}
 
 	if len(hk) > 0 {
-		fmt.Fprintf(w, "\n[hero map: %s]\n", hk[0])
+		_, _ = fmt.Fprintf(w, "\n[hero map: %s]\n", hk[0])
 		for _, k := range []string{"m_iPlayerID", "m_iEconSpecifyingPlayerID", "m_nPlayerOwnerID", "m_iIsControllableByPlayer64"} {
-			fmt.Fprintf(w, "%s [map type=%T]\n", k, heroes[hk[0]].Map()[k])
+			_, _ = fmt.Fprintf(w, "%s [map type=%T]\n", k, heroes[hk[0]].Map()[k])
 		}
 		dumpSortedMap(w, heroes[hk[0]].Map())
 	}
@@ -117,6 +117,6 @@ func dumpSortedMap(w io.Writer, m map[string]interface{}) {
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		fmt.Fprintf(w, "%s = %v\n", k, m[k])
+		_, _ = fmt.Fprintf(w, "%s = %v\n", k, m[k])
 	}
 }
