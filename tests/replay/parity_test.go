@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"manta-cli/internal/stats"
+	"github.com/drawiks/manta-cli/internal/stats"
 )
 
 // replayDir is the external corpus used for the parity harness. The large

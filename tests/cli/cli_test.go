@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"manta-cli/internal/cli"
-	"manta-cli/internal/stats"
+	"github.com/drawiks/manta-cli/internal/cli"
+	"github.com/drawiks/manta-cli/internal/stats"
 )
 
 func TestRunNoArgs(t *testing.T) {

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"manta-cli/internal/cli"
+	"github.com/drawiks/manta-cli/internal/cli"
 )
 
 func main() {

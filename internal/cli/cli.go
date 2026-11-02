@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"manta-cli/internal/stats"
+	"github.com/drawiks/manta-cli/internal/stats"
 )
 
 const UsageLine = "usage: manta_cli <match.dem|match.dem.bz2|match.dem.zst> [--stdin] [--verbose] [--dump-fields]"

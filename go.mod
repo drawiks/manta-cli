@@ -1,4 +1,4 @@
-module manta-cli
+module github.com/drawiks/manta-cli
 
 go 1.24
 
