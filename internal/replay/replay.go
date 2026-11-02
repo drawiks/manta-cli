@@ -231,6 +231,14 @@ func parseStream(ctx context.Context, r io.Reader, closer io.Closer, fallbackMat
 			return err
 		}
 		st.serverTick = m.GetTick()
+		return nil
+	})
+
+	p.Callbacks.OnCSVCMsg_PacketEntities(func(m *dota.CSVCMsg_PacketEntities) error {
+		if err := st.ctx.Err(); err != nil {
+			p.Stop()
+			return err
+		}
 		st.maybeSample()
 		return nil
 	})
