@@ -11,7 +11,7 @@ LDFLAGS := -s -w \
 
 .PHONY: build
 build:
-	$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) .
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN) .
 
 .PHONY: test
 test:

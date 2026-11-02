@@ -1,7 +1,8 @@
 FROM scratch
 
-COPY manta-cli /manta-cli
-
-USER 65532:65532
+ARG TARGETPLATFORM
 
 ENTRYPOINT ["/manta-cli"]
+COPY $TARGETPLATFORM/manta-cli /manta-cli
+
+USER 65532:65532

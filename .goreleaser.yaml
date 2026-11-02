@@ -47,28 +47,17 @@ changelog:
       - "^test:"
       - "^chore:"
 
-dockers:
-  - image_templates: ["ghcr.io/drawiks/manta-cli:{{ .Tag }}-amd64"]
-    use: buildx
-    dockerfile: Dockerfile
-    goos: linux
-    goarch: amd64
-    build_flag_templates:
-      - --platform=linux/amd64
-  - image_templates: ["ghcr.io/drawiks/manta-cli:{{ .Tag }}-arm64"]
-    use: buildx
-    dockerfile: Dockerfile
-    goos: linux
-    goarch: arm64
-    build_flag_templates:
-      - --platform=linux/arm64
-
-docker_manifests:
-  - name_template: ghcr.io/drawiks/manta-cli:{{ .Tag }}
-    image_templates:
-      - ghcr.io/drawiks/manta-cli:{{ .Tag }}-amd64
-      - ghcr.io/drawiks/manta-cli:{{ .Tag }}-arm64
-  - name_template: ghcr.io/drawiks/manta-cli:latest
-    image_templates:
-      - ghcr.io/drawiks/manta-cli:{{ .Tag }}-amd64
-      - ghcr.io/drawiks/manta-cli:{{ .Tag }}-arm64
+dockers_v2:
+  - images:
+      - ghcr.io/drawiks/manta-cli
+    tags:
+      - "{{ .Tag }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      "org.opencontainers.image.title": "{{ .ProjectName }}"
+      "org.opencontainers.image.version": "{{ .Version }}"
+      "org.opencontainers.image.revision": "{{ .FullCommit }}"
+      "org.opencontainers.image.source": "{{ .GitURL }}"
