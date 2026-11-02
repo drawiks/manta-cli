@@ -21,6 +21,17 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           cache: true
+      - name: Test
+        run: go test -race -shuffle=on -covermode=atomic -coverprofile=coverage.out ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
       - name: Install tools
         run: |
           go install mvdan.cc/gofumpt@v0.12.0
@@ -34,8 +45,6 @@ jobs:
         run: golangci-lint run
       - name: Comments
         run: scripts/check-comments.sh
-      - name: Test
-        run: go test -race -shuffle=on -covermode=atomic -coverprofile=coverage.out ./...
       - name: Vulnerability scan
         run: govulncheck ./...
 
