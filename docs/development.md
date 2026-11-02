@@ -22,6 +22,8 @@ make check
 
 `make bench` runs the aggregation benchmarks. The pre-push hook uses `-short`, so it never parses the large corpus. `make parity` is the explicit full run and needs `MANTA_REPLAY_DIR` pointing at a directory with `<id>.dem` and `<id>.out.json` pairs.
 
+The public API lives in the module root and `stats`; implementation packages stay under `internal/`. Before changing an exported name or field, check `go doc github.com/drawiks/manta-cli` and `go doc github.com/drawiks/manta-cli/stats`. After `v0.5.0`, add a pinned `gorelease` compatibility check as `make api-check`; do not add it to `make check`.
+
 ## Fuzzing
 
 ```bash
@@ -33,7 +35,7 @@ The targets seed themselves; a found input is written under `testdata/fuzz` and 
 
 ## Release
 
-The release is tag-driven. Bump the version in the tag, push `vX.Y.Z`, and the release workflow runs tests, GoReleaser, SBOM and the Docker image. Local snapshot:
+The release is tag-driven. Bump the version in the tag, push `vX.Y.Z`, and the release workflow runs tests, GoReleaser, SBOM and the Docker image. `v0.5.0` is the public API preview; formal Go module compatibility starts at `v1.0.0`. Local snapshot:
 
 ```bash
 make build

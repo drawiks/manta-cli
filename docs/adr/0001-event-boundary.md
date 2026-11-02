@@ -6,7 +6,7 @@ The manta adapter and the statistics fold started in one package. That made the 
 
 ## Decision
 
-The replay adapter emits typed values from `internal/events`. The aggregator consumes them and produces `model.Result`. Manta types never cross into the aggregator.
+The replay adapter emits typed values from `internal/events`. The aggregator consumes them and produces `stats.Match`. Manta types never cross into the aggregator.
 
 ## Consequences
 

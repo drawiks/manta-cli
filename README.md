@@ -1,6 +1,6 @@
 # manta-cli
 
-Standalone Go CLI that parses a single Dota 2 replay (`.dem` / `.dem.bz2` /
+Go CLI and library that parse a single Dota 2 replay (`.dem` / `.dem.bz2` /
 `.dem.zst`) with [`manta`](https://github.com/dotabuff/manta) and prints
 per-player statistics as one JSON object to stdout.
 
@@ -48,6 +48,41 @@ manta-cli 9053590215.dem --output match.json
 cat 9065268582.dem | manta-cli --stdin --compact
 manta-cli --version
 ```
+
+## Library
+
+The same parser is available as a Go package.
+
+```go
+import "github.com/drawiks/manta-cli"
+
+m, err := manta.ParseFile(ctx, "match.dem")
+if err != nil {
+    return err
+}
+fmt.Println(m.MatchID, len(m.Players))
+```
+
+`manta.ParseReader(ctx, r)` reads from an `io.Reader` and does not close it.
+Both functions detect `.dem`, `.dem.bz2` and `.dem.zst` from magic bytes.
+`manta.Match` is an alias for `stats.Match`; the field documentation is in
+`stats`. `ParseFile` uses the leading digits of the file name as a fallback
+match ID.
+
+Errors are classified with `errors.Is`:
+
+```go
+if errors.Is(err, manta.ErrNotReplay) {
+    // the input is not a Source 2 replay
+}
+if errors.Is(err, manta.ErrNoPlayerResource) {
+    // the replay has no CDOTA_PlayerResource
+}
+```
+
+The public API is documented in `docs/api.md`. `v0.5.0` is the first public
+API release; the shape is frozen for `v0.5.x`, and formal semantic-versioning
+compatibility starts at `v1.0.0`.
 
 ## Build
 
@@ -178,12 +213,15 @@ MANTA_REPLAY_DIR=/path/to/replays make parity
 
 Hooks run `gofumpt`, the fast linter and the comment rules on commit, check the commit message, and run the full test suite on push. CI is authoritative and runs the same checks plus `govulncheck`.
 
+- `stats` — public match, player and source types.
+- `manta` — public `ParseFile` and `ParseReader` facade.
+- `cmd/manta-cli` — command wiring.
 - `internal/aggregate`, `internal/catalog`, `internal/roles` — pure statistics and domain tests.
 - `internal/replay` — decompression, fuzz and the manta adapter.
 - `internal/cli` — flags, stdin, output and exit codes.
 - `tests/replay` — external parity harness.
 
-See `docs/architecture.md`, `docs/accuracy.md`, `docs/development.md` and `docs/schema.md`.
+See `docs/api.md`, `docs/architecture.md`, `docs/accuracy.md`, `docs/development.md` and `docs/schema.md`.
 
 ## License
 

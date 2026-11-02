@@ -31,6 +31,8 @@ Do not restate the code, add section banners, name the type or receiver, narrate
 
 Comments are full English sentences ending with a period, one or two lines, explaining why rather than what. Match the density of the surrounding code. Delete a comment with the code it describes. The code is English.
 
+Exported identifiers in the public `manta` and `stats` packages require Go doc comments; every exported field is documented. These are API documentation, not explanatory comments. The marker and language rules still apply.
+
 The machine form is `scripts/check-comments.sh`. It runs on commit and in CI.
 
 ## Before a pull request

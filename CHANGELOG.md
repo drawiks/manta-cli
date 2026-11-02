@@ -2,7 +2,24 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
-## Unreleased
+## 0.5.0 - 2026-11-02
+
+### Added
+
+- Public `manta` package with `ParseFile` and `ParseReader`.
+- Public `stats` package with `Match`, `Player` and `SourceEntry`.
+- `ErrNotReplay` and `ErrNoPlayerResource` error sentinels.
+
+### Changed
+
+- The command moved from the module root to `cmd/manta-cli`; install with `go install github.com/drawiks/manta-cli/cmd/manta-cli@latest`.
+- The internal output model was renamed to `stats.Match` and made public.
+
+### Notes
+
+- `v0.5.0` is the first public API release and a preview. The API shape is frozen for `v0.5.x`; formal Go module compatibility starts at `v1.0.0`.
+
+## 0.4.0 - 2026-11-02
 
 ### Added
 
