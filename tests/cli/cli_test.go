@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/drawiks/manta-cli"
 	"github.com/drawiks/manta-cli/internal/cli"
-	"github.com/drawiks/manta-cli/stats"
 )
 
 func run(args []string, stdin *bytes.Reader) (int, string, string) {
@@ -102,11 +102,11 @@ func TestRunDumpFieldsMissingFile(t *testing.T) {
 }
 
 func TestPrintTable(t *testing.T) {
-	res := &stats.Match{
+	res := &manta.Match{
 		MatchID:     42,
 		DurationSec: 100,
 		RadiantWin:  true,
-		Players: []stats.Player{
+		Players: []manta.Player{
 			{
 				Team: "radiant", Hero: "pudge", Name: "n", Kills: 8, Deaths: 3,
 				Assists: 12, Level: 25, LastHits: 230, Networth: 18900,
