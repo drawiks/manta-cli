@@ -1,97 +1,182 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"strings"
+	"os"
+	"path/filepath"
 	"text/tabwriter"
 
-	"github.com/drawiks/manta-cli/internal/stats"
+	"github.com/spf13/pflag"
+
+	"github.com/drawiks/manta-cli/internal/app"
+	"github.com/drawiks/manta-cli/internal/model"
+	"github.com/drawiks/manta-cli/internal/replay"
+	"github.com/drawiks/manta-cli/internal/version"
 )
 
-const UsageLine = "usage: manta_cli <match.dem|match.dem.bz2|match.dem.zst> [--stdin] [--verbose] [--dump-fields]"
+const UsageLine = "usage: manta-cli <replay> [--stdin] [--output PATH] [--verbose] [--quiet] [--compact] [--dump-fields] [--version]"
 
-// Run parses arguments manually so flags may appear both before and after the
-// positional file path, matching the documented CLI (§3). stdout stays
-// reserved for JSON; everything else goes to stderr.
-func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	var (
-		verbose    bool
-		dumpFields bool
-		stdinMode  bool
-		paths      []string
-	)
-	for _, a := range args {
-		switch a {
-		case "-h", "--help":
-			fmt.Fprintln(stderr, UsageLine)
-			return 0
-		case "-verbose", "--verbose":
-			verbose = true
-		case "-dump-fields", "--dump-fields":
-			dumpFields = true
-		case "-stdin", "--stdin":
-			stdinMode = true
-		default:
-			if strings.HasPrefix(a, "-") {
-				fmt.Fprintf(stderr, "error: unknown flag %q\n%s\n", a, UsageLine)
-				return 2
-			}
-			paths = append(paths, a)
-		}
-	}
-
-	if stdinMode {
-		if len(paths) > 0 {
-			fmt.Fprintln(stderr, "error: --stdin takes no file argument\n"+UsageLine)
-			return 2
-		}
-		if dumpFields {
-			return stats.DumpStdin(stdin, stderr)
-		}
-		res, err := stats.ParseStdin(stdin)
-		if err != nil {
-			fmt.Fprintf(stderr, "error: %v\n", err)
-			return 1
-		}
-		return emit(res, verbose, stdout, stderr)
-	}
-
-	if len(paths) != 1 {
-		fmt.Fprintln(stderr, "error: "+UsageLine)
-		return 2
-	}
-	path := paths[0]
-
-	if dumpFields {
-		return stats.DumpEntityFields(path, stderr)
-	}
-
-	res, err := stats.ParseReplay(path)
-	if err != nil {
-		fmt.Fprintf(stderr, "error: %v\n", err)
-		return 1
-	}
-	return emit(res, verbose, stdout, stderr)
+type options struct {
+	stdin      bool
+	verbose    bool
+	quiet      bool
+	compact    bool
+	dumpFields bool
+	showVer    bool
+	help       bool
+	output     string
+	paths      []string
 }
 
-func emit(res *stats.Result, verbose bool, stdout, stderr io.Writer) int {
-	out, err := json.MarshalIndent(res, "", "  ")
+func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := pflag.NewFlagSet("manta-cli", pflag.ContinueOnError)
+	fs.SetInterspersed(true)
+	fs.SetOutput(stderr)
+	fs.Usage = func() { printUsage(stderr) }
+
+	var o options
+	fs.BoolVar(&o.stdin, "stdin", false, "read the replay from standard input")
+	fs.BoolVar(&o.verbose, "verbose", false, "print a human-readable table to stderr")
+	fs.BoolVarP(&o.quiet, "quiet", "q", false, "suppress non-error output on stderr")
+	fs.BoolVar(&o.compact, "compact", false, "emit compact JSON")
+	fs.BoolVar(&o.dumpFields, "dump-fields", false, "dump PlayerResource and team-data fields to stderr")
+	fs.BoolVar(&o.showVer, "version", false, "print version and exit")
+	fs.BoolVarP(&o.help, "help", "h", false, "print help and exit")
+	fs.StringVarP(&o.output, "output", "o", "", "write JSON to this path instead of stdout")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, pflag.ErrHelp) {
+			printUsage(stderr)
+			return 0
+		}
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		printUsage(stderr)
+		return 2
+	}
+	if o.help {
+		printUsage(stderr)
+		return 0
+	}
+	if o.showVer {
+		fmt.Fprintln(stdout, version.String())
+		return 0
+	}
+
+	o.paths = fs.Args()
+	if o.stdin && len(o.paths) > 0 {
+		fmt.Fprintln(stderr, "error: --stdin takes no replay argument")
+		printUsage(stderr)
+		return 2
+	}
+	if !o.stdin && (len(o.paths) != 1 || o.paths[0] == "-") {
+		if len(o.paths) == 1 && o.paths[0] == "-" {
+			o.stdin = true
+		} else {
+			fmt.Fprintln(stderr, "error: exactly one replay path is required")
+			printUsage(stderr)
+			return 2
+		}
+	}
+
+	if o.dumpFields {
+		if o.stdin {
+			return replay.DumpStdin(stdin, stderr)
+		}
+		return replay.DumpEntityFields(o.paths[0], stderr)
+	}
+
+	var res *model.Result
+	var err error
+	if o.stdin {
+		res, err = app.ParseStream(ctx, stdin)
+	} else {
+		res, err = app.ParseFile(ctx, o.paths[0])
+	}
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return 130
+		}
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return 1
 	}
-	fmt.Fprintln(stdout, string(out))
+	return emit(res, o, stdout, stderr)
+}
 
-	if verbose {
+func emit(res *model.Result, o options, stdout, stderr io.Writer) int {
+	var out []byte
+	var err error
+	if o.compact {
+		out, err = json.Marshal(res)
+	} else {
+		out, err = json.MarshalIndent(res, "", "  ")
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "error: encode: %v\n", err)
+		return 1
+	}
+	out = append(out, '\n')
+
+	if o.output != "" && o.output != "-" {
+		if err := writeFileAtomic(o.output, out); err != nil {
+			fmt.Fprintf(stderr, "error: write %s: %v\n", o.output, err)
+			return 1
+		}
+	} else {
+		if _, err := stdout.Write(out); err != nil {
+			fmt.Fprintf(stderr, "error: write stdout: %v\n", err)
+			return 1
+		}
+	}
+
+	if o.verbose && !o.quiet {
 		PrintTable(stderr, res)
 	}
 	return 0
 }
 
-// PrintTable writes a human-readable summary of res to w.
-func PrintTable(w io.Writer, res *stats.Result) {
+func writeFileAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".manta-cli-*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer os.Remove(name)
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, path)
+}
+
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, UsageLine)
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Parse a Dota 2 replay and write the match statistics as JSON.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Inputs: .dem, .dem.bz2, .dem.zst, or - / --stdin.")
+	fmt.Fprintln(w, "Exit codes: 0 success, 1 parse or I/O error, 2 usage, 130 interrupted.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Examples:")
+	fmt.Fprintln(w, "  manta-cli match.dem > match.json")
+	fmt.Fprintln(w, "  manta-cli match.dem.bz2 --verbose")
+	fmt.Fprintln(w, "  cat match.dem | manta-cli --stdin --compact")
+	fmt.Fprintln(w, "  manta-cli match.dem --output match.json")
+}
+
+func PrintTable(w io.Writer, res *model.Result) {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	fmt.Fprintf(tw, "match_id=%d duration=%.0fs radiant_win=%v\n",
 		res.MatchID, res.DurationSec, res.RadiantWin)

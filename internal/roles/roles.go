@@ -1,11 +1,15 @@
-package stats
+package roles
 
-import "sort"
+import (
+	"sort"
 
-// Lane and position detection uses the first roleWindowSec seconds of hero
+	"github.com/drawiks/manta-cli/internal/model"
+)
+
+// Lane and position detection uses the first WindowSec seconds of hero
 // world positions plus the farm profile at the end of that window.
 const (
-	roleWindowSec = 600.0
+	WindowSec = 600.0
 
 	midBand = 2000.0
 	midXMin = 10500.0
@@ -51,17 +55,17 @@ const (
 	laneOff
 )
 
-type roleSamples struct {
+type Samples struct {
 	zones [4]int
 	total int
 }
 
-func (r *roleSamples) sample(x, y float64) {
+func (r *Samples) Sample(x, y float64) {
 	r.zones[classifyZone(x, y)]++
 	r.total++
 }
 
-func (r *roleSamples) dominant() (roleZone, bool) {
+func (r *Samples) dominant() (roleZone, bool) {
 	if r.total == 0 {
 		return zoneOther, false
 	}
@@ -108,54 +112,54 @@ func laneName(pos int) string {
 	return ""
 }
 
-type roleFarm struct {
-	networth int
-	lh       int
-	xp       int
+type Farm struct {
+	Networth int
+	LH       int
+	XP       int
 }
 
-type roleInput struct {
-	p           *Player
-	stats       *roleSamples
-	farm        roleFarm
+type Input struct {
+	P           *model.Player
+	Stats       *Samples
+	Farm        Farm
 	supportLike bool
 }
 
-func (r roleInput) supportPurchases() int {
-	return r.p.GoldSpentWards + r.p.GoldSpentSmoke + r.p.GoldSpentDust
+func (r Input) supportPurchases() int {
+	return r.P.GoldSpentWards + r.P.GoldSpentSmoke + r.P.GoldSpentDust
 }
 
-func clearlyMoreCore(a, b roleInput) bool {
-	if a.farm.networth <= 0 || b.farm.networth <= 0 {
+func clearlyMoreCore(a, b Input) bool {
+	if a.Farm.Networth <= 0 || b.Farm.Networth <= 0 {
 		return false
 	}
-	return a.farm.networth*100 > b.farm.networth*110
+	return a.Farm.Networth*100 > b.Farm.Networth*110
 }
 
-func coreLess(a, b roleInput) bool {
-	if a.farm.networth != b.farm.networth {
-		return a.farm.networth > b.farm.networth
+func coreLess(a, b Input) bool {
+	if a.Farm.Networth != b.Farm.Networth {
+		return a.Farm.Networth > b.Farm.Networth
 	}
-	if a.farm.lh != b.farm.lh {
-		return a.farm.lh > b.farm.lh
+	if a.Farm.LH != b.Farm.LH {
+		return a.Farm.LH > b.Farm.LH
 	}
-	if a.farm.xp != b.farm.xp {
-		return a.farm.xp > b.farm.xp
+	if a.Farm.XP != b.Farm.XP {
+		return a.Farm.XP > b.Farm.XP
 	}
 	if a.supportPurchases() != b.supportPurchases() {
 		return a.supportPurchases() < b.supportPurchases()
 	}
-	return a.p.PlayerID < b.p.PlayerID
+	return a.P.PlayerID < b.P.PlayerID
 }
 
-func assignRoles(in []roleInput) {
-	radiant := make([]roleInput, 0, 5)
-	dire := make([]roleInput, 0, 5)
+func AssignRoles(in []Input) {
+	radiant := make([]Input, 0, 5)
+	dire := make([]Input, 0, 5)
 	for _, r := range in {
-		if r.stats == nil || r.stats.total == 0 {
+		if r.Stats == nil || r.Stats.total == 0 {
 			continue
 		}
-		switch r.p.Team {
+		switch r.P.Team {
 		case "radiant":
 			radiant = append(radiant, r)
 		case "dire":
@@ -166,22 +170,22 @@ func assignRoles(in []roleInput) {
 	assignTeam(dire)
 }
 
-func assignTeam(in []roleInput) {
-	byCore := func(s []roleInput) {
+func assignTeam(in []Input) {
+	byCore := func(s []Input) {
 		sort.SliceStable(s, func(i, j int) bool { return coreLess(s[i], s[j]) })
 	}
 
-	ranked := append([]roleInput(nil), in...)
+	ranked := append([]Input(nil), in...)
 	byCore(ranked)
-	coreLike := make(map[*Player]bool, len(in))
+	coreLike := make(map[*model.Player]bool, len(in))
 	for i, r := range ranked {
-		coreLike[r.p] = i < 3
+		coreLike[r.P] = i < 3
 	}
 
-	var mids, safes, offs, unk []roleInput
+	var mids, safes, offs, unk []Input
 	for _, r := range in {
-		if z, ok := r.stats.dominant(); ok {
-			switch laneOf(z, r.p.Team) {
+		if z, ok := r.Stats.dominant(); ok {
+			switch laneOf(z, r.P.Team) {
 			case laneMid:
 				mids = append(mids, r)
 			case laneSafe:
@@ -200,14 +204,14 @@ func assignTeam(in []roleInput) {
 	byCore(offs)
 
 	used := map[int]bool{}
-	assigned := map[int]roleInput{}
-	set := func(r roleInput, pos int) {
-		r.p.Position = pos
-		r.p.Lane = laneName(pos)
+	assigned := map[int]Input{}
+	set := func(r Input, pos int) {
+		r.P.Position = pos
+		r.P.Lane = laneName(pos)
 		used[pos] = true
 		assigned[pos] = r
 	}
-	overflow := func(r roleInput) {
+	overflow := func(r Input) {
 		r.supportLike = true
 		unk = append(unk, r)
 	}
@@ -261,7 +265,7 @@ func assignTeam(in []roleInput) {
 		return p, true
 	}
 	for _, r := range unk {
-		if !r.supportLike && coreLike[r.p] {
+		if !r.supportLike && coreLike[r.P] {
 			if pos, ok := take(&freeCore); ok {
 				set(r, pos)
 				continue
@@ -281,7 +285,7 @@ func assignTeam(in []roleInput) {
 	}
 
 	if p3, ok3 := assigned[offCorePos]; ok3 {
-		if p4, ok4 := assigned[offSuppPos]; ok4 && coreLike[p4.p] && clearlyMoreCore(p4, p3) {
+		if p4, ok4 := assigned[offSuppPos]; ok4 && coreLike[p4.P] && clearlyMoreCore(p4, p3) {
 			set(p3, offSuppPos)
 			set(p4, offCorePos)
 		}

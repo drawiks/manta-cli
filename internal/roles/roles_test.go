@@ -1,6 +1,10 @@
-package stats
+package roles
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/drawiks/manta-cli/internal/model"
+)
 
 func TestClassifyZoneAndLane(t *testing.T) {
 	if classifyZone(16000, 16000) != zoneMid {
@@ -27,32 +31,32 @@ func TestClassifyZoneAndLane(t *testing.T) {
 }
 
 func TestAssignRoles(t *testing.T) {
-	players := []Player{
+	players := []model.Player{
 		{PlayerID: 0, Team: "radiant"},
 		{PlayerID: 1, Team: "radiant"},
 		{PlayerID: 2, Team: "radiant"},
 		{PlayerID: 3, Team: "radiant"},
 		{PlayerID: 4, Team: "radiant"},
 	}
-	samples := []*roleSamples{
+	samples := []*Samples{
 		safeSamples(100),
 		safeSamples(40),
 		midSamples(80),
 		offSamples(60),
 		offSamples(20),
 	}
-	farm := []roleFarm{
-		{networth: 20000, lh: 300, xp: 20000},
-		{networth: 6000, lh: 30, xp: 8000},
-		{networth: 18000, lh: 250, xp: 19000},
-		{networth: 16000, lh: 200, xp: 17000},
-		{networth: 5000, lh: 20, xp: 7000},
+	farm := []Farm{
+		{Networth: 20000, LH: 300, XP: 20000},
+		{Networth: 6000, LH: 30, XP: 8000},
+		{Networth: 18000, LH: 250, XP: 19000},
+		{Networth: 16000, LH: 200, XP: 17000},
+		{Networth: 5000, LH: 20, XP: 7000},
 	}
-	in := make([]roleInput, len(players))
+	in := make([]Input, len(players))
 	for i := range players {
-		in[i] = roleInput{p: &players[i], stats: samples[i], farm: farm[i]}
+		in[i] = Input{P: &players[i], Stats: samples[i], Farm: farm[i]}
 	}
-	assignRoles(in)
+	AssignRoles(in)
 	want := []struct {
 		pos  int
 		lane string
@@ -66,33 +70,33 @@ func TestAssignRoles(t *testing.T) {
 }
 
 func TestAssignRolesNoSamples(t *testing.T) {
-	p := Player{PlayerID: 0, Team: "radiant"}
-	assignRoles([]roleInput{{p: &p}})
+	p := model.Player{PlayerID: 0, Team: "radiant"}
+	AssignRoles([]Input{{P: &p}})
 	if p.Position != 0 || p.Lane != "" {
 		t.Errorf("no samples should leave role empty, got pos=%d lane=%q", p.Position, p.Lane)
 	}
 }
 
-func safeSamples(n int) *roleSamples {
-	s := &roleSamples{}
+func safeSamples(n int) *Samples {
+	s := &Samples{}
 	for i := 0; i < n; i++ {
-		s.sample(22000, 9000)
+		s.Sample(22000, 9000)
 	}
 	return s
 }
 
-func offSamples(n int) *roleSamples {
-	s := &roleSamples{}
+func offSamples(n int) *Samples {
+	s := &Samples{}
 	for i := 0; i < n; i++ {
-		s.sample(9000, 22000)
+		s.Sample(9000, 22000)
 	}
 	return s
 }
 
-func midSamples(n int) *roleSamples {
-	s := &roleSamples{}
+func midSamples(n int) *Samples {
+	s := &Samples{}
 	for i := 0; i < n; i++ {
-		s.sample(16000, 16000)
+		s.Sample(16000, 16000)
 	}
 	return s
 }

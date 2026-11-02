@@ -1,4 +1,4 @@
-package stats
+package catalog
 
 import (
 	"regexp"
@@ -142,7 +142,7 @@ var HeroMap = map[string]int{
 var heroIDByKey = func() map[string]int {
 	m := make(map[string]int, len(HeroMap))
 	for name, id := range HeroMap {
-		m[heroKey(name)] = id
+		m[HeroKey(name)] = id
 	}
 	return m
 }()
@@ -247,38 +247,38 @@ var ItemWardCosts = map[string]int{
 	"item_dust":            80,
 }
 
-type modKind uint8
+type ModKind uint8
 
 const (
-	kindNone modKind = iota
-	kindBreak
-	kindFear
-	kindRoot
-	kindLeash
-	kindTrap
-	kindTaunt
-	kindSilence
-	kindDisarm
-	kindHeal
-	kindBuff
-	kindCount
+	KindNone ModKind = iota
+	KindBreak
+	KindFear
+	KindRoot
+	KindLeash
+	KindTrap
+	KindTaunt
+	KindSilence
+	KindDisarm
+	KindHeal
+	KindBuff
+	KindCount
 )
 
-type purgeGate uint8
+type PurgeGate uint8
 
 const (
-	gateNone purgeGate = iota
-	gateShard
-	gateTalent
+	GateNone PurgeGate = iota
+	GateShard
+	GateTalent
 )
 
-type modClass struct {
-	kind     modKind
-	category string
-	clean    string
-	purge    bool
-	gate     purgeGate
-	talent   string
+type ModClass struct {
+	Kind     ModKind
+	Category string
+	Clean    string
+	Purge    bool
+	Gate     PurgeGate
+	Talent   string
 }
 
 var suffixStrips = []string{
@@ -291,48 +291,48 @@ func stripModifier(inf string) string {
 	return strings.TrimPrefix(inf, "modifier_")
 }
 
-func canonicalName(clean string) string {
+func CanonicalName(clean string) string {
 	for _, s := range suffixStrips {
 		clean = strings.TrimSuffix(clean, s)
 	}
 	return clean
 }
 
-func classifyModifier(inf string) modClass {
+func ClassifyModifier(inf string) ModClass {
 	rawClean := stripModifier(inf)
-	c := modClass{clean: canonicalName(rawClean), purge: PurgeModifiers[rawClean]}
+	c := ModClass{Clean: CanonicalName(rawClean), Purge: PurgeModifiers[rawClean]}
 	if ShardPurgeModifiers[rawClean] {
-		c.purge = true
-		c.gate = gateShard
+		c.Purge = true
+		c.Gate = GateShard
 	}
 	if talent, ok := TalentPurgeModifiers[rawClean]; ok {
-		c.purge = true
-		c.gate = gateTalent
-		c.talent = talent
+		c.Purge = true
+		c.Gate = GateTalent
+		c.Talent = talent
 	}
 	switch {
 	case classifyBreak(inf):
-		c.kind = kindBreak
+		c.Kind = KindBreak
 	case classifyFear(inf):
-		c.kind = kindFear
+		c.Kind = KindFear
 	case classifyRoot(inf):
-		c.kind = kindRoot
+		c.Kind = KindRoot
 	case classifyLeash(inf):
-		c.kind = kindLeash
+		c.Kind = KindLeash
 	case classifyTrap(inf):
-		c.kind = kindTrap
+		c.Kind = KindTrap
 	case classifyTaunt(inf):
-		c.kind = kindTaunt
+		c.Kind = KindTaunt
 	case classifySilence(inf):
-		c.kind = kindSilence
+		c.Kind = KindSilence
 	case classifyDisarm(inf):
-		c.kind = kindDisarm
+		c.Kind = KindDisarm
 	case classifyHeal(inf):
-		c.kind = kindHeal
+		c.Kind = KindHeal
 	default:
 		if cat := BuffCategories[rawClean]; cat != "" {
-			c.kind = kindBuff
-			c.category = cat
+			c.Kind = KindBuff
+			c.Category = cat
 		}
 	}
 	return c
@@ -465,7 +465,7 @@ func classifyDisarm(inf string) bool {
 }
 
 // trackedBuff reports whether a buff category is reported in buff_sources.
-var trackedBuff = map[string]bool{
+var TrackedBuff = map[string]bool{
 	"save":           true,
 	"purge":          true,
 	"shield":         true,
@@ -476,13 +476,13 @@ var trackedBuff = map[string]bool{
 	"mana_restore":   true,
 }
 
-func heroKey(s string) string {
+func HeroKey(s string) string {
 	return strings.ReplaceAll(s, "_", "")
 }
 
 var camelRe = regexp.MustCompile(`([a-z])([A-Z])`)
 
-func unitToHeroName(unit string) string {
+func UnitToHeroName(unit string) string {
 	const prefix = "CDOTA_Unit_Hero_"
 	if !strings.HasPrefix(unit, prefix) {
 		return unit
@@ -492,14 +492,14 @@ func unitToHeroName(unit string) string {
 	return "npc_dota_hero_" + strings.ToLower(name)
 }
 
-func heroID(name string) int {
+func HeroID(name string) int {
 	if id, ok := HeroMap[name]; ok {
 		return id
 	}
-	return heroIDByKey[heroKey(name)]
+	return heroIDByKey[HeroKey(name)]
 }
 
-func isBuilding(name string) bool {
+func IsBuilding(name string) bool {
 	return strings.Contains(name, "tower") ||
 		strings.Contains(name, "rax") ||
 		strings.Contains(name, "fortress") ||

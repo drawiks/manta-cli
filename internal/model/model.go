@@ -1,7 +1,5 @@
-package stats
+package model
 
-// Result is the top-level JSON object emitted to stdout. The shape matches
-// odota-cli's Match exactly so the two tools are interchangeable.
 type Result struct {
 	MatchID     int64    `json:"match_id"`
 	DurationSec float64  `json:"duration_sec"`
@@ -9,7 +7,6 @@ type Result struct {
 	Players     []Player `json:"players"`
 }
 
-// Player holds aggregated per-player statistics.
 type Player struct {
 	SteamID          int64         `json:"steam_id"`
 	PlayerID         int           `json:"player_id"`
@@ -69,7 +66,6 @@ type Player struct {
 	CourierKills     int           `json:"courier_kills"`
 }
 
-// SourceEntry is one attribution line for a tracked effect.
 type SourceEntry struct {
 	Inflictor string  `json:"inflictor"`
 	Category  string  `json:"category"`

@@ -8,7 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/drawiks/manta-cli/internal/stats"
+	"context"
+
+	"github.com/drawiks/manta-cli/internal/app"
 )
 
 // replayDir is the external corpus used for the parity harness. The large
@@ -53,7 +55,7 @@ func TestParityWithOdotaCLI(t *testing.T) {
 			t.Logf("%s: replay not present, skipping", id)
 			continue
 		}
-		got, err := stats.ParseReplay(dem)
+		got, err := app.ParseFile(context.Background(), dem)
 		if err != nil {
 			t.Fatalf("%s: parse: %v", id, err)
 		}
@@ -166,7 +168,7 @@ func TestJSONRoundtrip(t *testing.T) {
 		if !ok {
 			continue
 		}
-		res, err := stats.ParseReplay(dem)
+		res, err := app.ParseFile(context.Background(), dem)
 		if err != nil {
 			t.Fatalf("%s: %v", id, err)
 		}

@@ -1,9 +1,10 @@
-package stats
+package replay
 
 import (
 	"bufio"
 	"bytes"
 	"compress/bzip2"
+	"context"
 	"fmt"
 	"io"
 	"math"
@@ -15,6 +16,9 @@ import (
 
 	"github.com/dotabuff/manta"
 	"github.com/dotabuff/manta/dota"
+
+	"github.com/drawiks/manta-cli/internal/catalog"
+	"github.com/drawiks/manta-cli/internal/events"
 	"github.com/klauspost/compress/zstd"
 )
 
@@ -118,7 +122,7 @@ type slotInfo struct {
 
 type pendingCombat struct {
 	rawTime int
-	ev      combatEvent
+	ev      events.Combat
 }
 
 type chatEvent struct {
@@ -128,8 +132,9 @@ type chatEvent struct {
 }
 
 type replayState struct {
-	p  *manta.Parser
-	ag *aggregator
+	ctx     context.Context
+	p       *manta.Parser
+	handler events.Handler
 
 	pr    *manta.Entity
 	rules *manta.Entity
@@ -146,7 +151,7 @@ type replayState struct {
 
 	pending          []pendingCombat
 	pendingChat      []chatEvent
-	pendingIntervals []intervalData
+	pendingIntervals []events.Interval
 
 	lastEmitted int
 	hasEmitted  bool
@@ -157,37 +162,39 @@ type replayState struct {
 	lastCombatTime int
 	lastTBKillTeam int
 	matchID        int64
+	gotEpilogue    bool
 }
 
-func ParseReplay(path string) (*Result, error) {
+func ParseFile(ctx context.Context, path string, h events.Handler) error {
 	r, closer, err := OpenReader(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return parseStream(r, closer, matchIDFromFilename(path))
+	return parseStream(ctx, r, closer, matchIDFromFilename(path), h)
 }
 
-func ParseStdin(r io.Reader) (*Result, error) {
+func ParseStream(ctx context.Context, r io.Reader, h events.Handler) error {
 	reader, closer, err := decompressReader(r)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return parseStream(reader, closer, 0)
+	return parseStream(ctx, reader, closer, 0, h)
 }
 
-func parseStream(r io.Reader, closer io.Closer, fallbackMatchID int64) (*Result, error) {
+func parseStream(ctx context.Context, r io.Reader, closer io.Closer, fallbackMatchID int64, h events.Handler) error {
 	if closer != nil {
 		defer closer.Close()
 	}
 
 	p, err := manta.NewStreamParser(r)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	st := &replayState{
+		ctx:          ctx,
 		p:            p,
-		ag:           newAggregator(),
+		handler:      h,
 		teams:        map[string]*manta.Entity{},
 		handleSlot:   map[uint64]int{},
 		abilityNames: map[uint64]string{},
@@ -195,6 +202,10 @@ func parseStream(r io.Reader, closer io.Closer, fallbackMatchID int64) (*Result,
 	}
 
 	p.OnEntity(func(e *manta.Entity, op manta.EntityOp) error {
+		if err := st.ctx.Err(); err != nil {
+			p.Stop()
+			return err
+		}
 		if !op.Flag(manta.EntityOpEntered) {
 			return nil
 		}
@@ -210,7 +221,7 @@ func parseStream(r io.Reader, closer io.Closer, fallbackMatchID int64) (*Result,
 			st.teams["dire"] = e
 		case strings.HasPrefix(cn, heroClassPrefix):
 			if st.resolveDue() {
-				st.assignHero(handleOf(e), unitToHeroName(cn))
+				st.assignHero(handleOf(e), catalog.UnitToHeroName(cn))
 			}
 		}
 		st.resolveSlots()
@@ -218,6 +229,10 @@ func parseStream(r io.Reader, closer io.Closer, fallbackMatchID int64) (*Result,
 	})
 
 	p.Callbacks.OnCNETMsg_Tick(func(m *dota.CNETMsg_Tick) error {
+		if err := st.ctx.Err(); err != nil {
+			p.Stop()
+			return err
+		}
 		st.serverTick = m.GetTick()
 		st.maybeSample()
 		return nil
@@ -231,13 +246,13 @@ func parseStream(r io.Reader, closer io.Closer, fallbackMatchID int64) (*Result,
 		if d.GetMatchId() != 0 {
 			st.matchID = int64(d.GetMatchId())
 		}
-		players := make([]playerInfo, 0, len(d.GetPlayerInfo()))
+		players := make([]events.PlayerInfo, 0, len(d.GetPlayerInfo()))
 		for i, pi := range d.GetPlayerInfo() {
 			team := "radiant"
 			if pi.GetGameTeam() == teamDire {
 				team = "dire"
 			}
-			players = append(players, playerInfo{
+			players = append(players, events.PlayerInfo{
 				Slot:    i,
 				SteamID: int64(pi.GetSteamid()),
 				Hero:    pi.GetHeroName(),
@@ -245,31 +260,43 @@ func parseStream(r io.Reader, closer io.Closer, fallbackMatchID int64) (*Result,
 				Team:    team,
 			})
 		}
-		st.ag.setEpilogue(
-			st.matchID,
-			shortestFloat32(float64(info.GetPlaybackTime())),
-			d.GetGameWinner() == 2,
-			players,
-		)
+		st.gotEpilogue = true
+		st.handler.Epilogue(events.Epilogue{
+			MatchID:     st.matchID,
+			DurationSec: float32ToFloat64(info.GetPlaybackTime()),
+			RadiantWin:  d.GetGameWinner() == 2,
+			Players:     players,
+		})
 		return nil
 	})
 
 	p.Callbacks.OnCMsgDOTACombatLogEntry(func(e *dota.CMsgDOTACombatLogEntry) error {
+		if err := st.ctx.Err(); err != nil {
+			p.Stop()
+			return err
+		}
 		st.handleCombat(e)
 		return nil
 	})
 
 	p.Callbacks.OnCDOTAUserMsg_ChatEvent(func(e *dota.CDOTAUserMsg_ChatEvent) error {
+		if err := st.ctx.Err(); err != nil {
+			p.Stop()
+			return err
+		}
 		st.handleChat(e)
 		return nil
 	})
 
 	if err := p.Start(); err != nil {
-		return nil, err
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	if st.pr == nil {
-		return nil, fmt.Errorf("CDOTA_PlayerResource not found")
+		return fmt.Errorf("CDOTA_PlayerResource not found")
 	}
 	if !st.startKnown {
 		st.startKnown = true
@@ -281,8 +308,7 @@ func parseStream(r io.Reader, closer io.Closer, fallbackMatchID int64) (*Result,
 	if st.init {
 		st.maybeSample()
 	}
-	st.finishRoster()
-	return st.ag.result(), nil
+	return st.finishRoster()
 }
 
 func (st *replayState) resolveDue() bool { return !st.init }
@@ -328,7 +354,7 @@ func (st *replayState) resolveSlots() {
 			st.handleSlot[handle] = added
 			st.assignHero(handle, hero)
 		}
-		st.ag.setSlot(added, teamName, hero)
+		st.handler.Slot(events.Slot{Slot: added, Team: teamName, Hero: hero})
 		added++
 	}
 	if added == 10 {
@@ -341,7 +367,7 @@ func (st *replayState) heroName(handle uint64) string {
 		return ""
 	}
 	if e := st.p.FindEntityByHandle(handle); e != nil {
-		return unitToHeroName(e.GetClassName())
+		return catalog.UnitToHeroName(e.GetClassName())
 	}
 	return ""
 }
@@ -354,7 +380,7 @@ func (st *replayState) assignHero(handle uint64, hero string) {
 	if !ok {
 		return
 	}
-	st.ag.setSlot(slot, st.slots[slot].team, hero)
+	st.handler.Slot(events.Slot{Slot: slot, Team: st.slots[slot].team, Hero: hero})
 }
 
 func (st *replayState) handleCombat(e *dota.CMsgDOTACombatLogEntry) {
@@ -378,18 +404,22 @@ func (st *replayState) handleCombat(e *dota.CMsgDOTACombatLogEntry) {
 	if e.GetType() == dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_TEAM_BUILDING_KILL {
 		st.lastTBKillTeam = int(e.GetTargetTeam())
 	}
-	ev := st.combatEvent(e)
+	t, ok := combatType(e.GetType())
+	if !ok {
+		return
+	}
+	ev := st.combatEvent(e, t)
 	if !st.startKnown {
 		st.pending = append(st.pending, pendingCombat{rawTime: rawTime, ev: ev})
 		return
 	}
 	ev.Time = rawTime - st.gameStart
-	st.dispatchCombat(ev)
+	st.handler.Combat(ev)
 }
 
-func (st *replayState) combatEvent(e *dota.CMsgDOTACombatLogEntry) combatEvent {
-	return combatEvent{
-		Type:             e.GetType().String(),
+func (st *replayState) combatEvent(e *dota.CMsgDOTACombatLogEntry, t events.CombatType) events.Combat {
+	return events.Combat{
+		Type:             t,
 		AttackerName:     st.combatName(e.GetAttackerName()),
 		TargetName:       st.combatName(e.GetTargetName()),
 		SourceName:       st.combatName(e.GetDamageSourceName()),
@@ -426,25 +456,26 @@ func (st *replayState) purchaseName(e *dota.CMsgDOTACombatLogEntry) string {
 	return ""
 }
 
-func (st *replayState) dispatchCombat(ev combatEvent) {
-	switch ev.Type {
-	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_DAMAGE.String():
-		st.ag.onDamage(ev)
-	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_HEAL.String():
-		st.ag.onHeal(ev)
-	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_ADD.String():
-		st.ag.onModifier(ev, true)
-	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_REMOVE.String():
-		st.ag.onModifier(ev, false)
-	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_PURCHASE.String():
-		st.ag.onPurchase(ev)
-	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_GOLD.String():
-		st.ag.onGold(ev)
-	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_DEATH.String():
-		st.ag.onDeath(ev)
-	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_ABILITY.String():
-		st.ag.onAbility(ev)
+func combatType(t dota.DOTA_COMBATLOG_TYPES) (events.CombatType, bool) {
+	switch t {
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_DAMAGE:
+		return events.CombatDamage, true
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_HEAL:
+		return events.CombatHeal, true
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_ADD:
+		return events.CombatModifierAdd, true
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_REMOVE:
+		return events.CombatModifierRemove, true
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_PURCHASE:
+		return events.CombatPurchase, true
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_GOLD:
+		return events.CombatGold, true
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_DEATH:
+		return events.CombatDeath, true
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_ABILITY:
+		return events.CombatAbility, true
 	}
+	return 0, false
 }
 
 func (st *replayState) handleChat(e *dota.CDOTAUserMsg_ChatEvent) {
@@ -467,13 +498,13 @@ func (st *replayState) handleChat(e *dota.CDOTAUserMsg_ChatEvent) {
 func (st *replayState) dispatchChat(ce chatEvent) {
 	switch ce.kind {
 	case "CHAT_MESSAGE_FIRSTBLOOD":
-		st.ag.onFirstBlood(ce.player1)
+		st.handler.Chat(events.Chat{Kind: events.ChatFirstBlood, Slot: ce.player1})
 	case "CHAT_MESSAGE_MINIBOSS_KILL":
 		t := ce.rawTime - st.gameStart
 		if t <= 0 {
 			t = st.currentTime() - st.gameStart
 		}
-		st.ag.onMiniboss(ce.player1, t)
+		st.handler.Chat(events.Chat{Kind: events.ChatMiniboss, Slot: ce.player1, Time: t})
 	}
 }
 
@@ -484,7 +515,7 @@ func (st *replayState) flushPending() {
 	for _, p := range st.pending {
 		ev := p.ev
 		ev.Time = p.rawTime - st.gameStart
-		st.dispatchCombat(ev)
+		st.handler.Combat(ev)
 	}
 	st.pending = nil
 	for _, ce := range st.pendingChat {
@@ -531,7 +562,7 @@ func (st *replayState) maybeSample() {
 }
 
 func (st *replayState) snapshotInterval(raw int) {
-	ivs := make([]intervalData, 0, 10)
+	ivs := make([]events.Interval, 0, 10)
 	for slot := 0; slot < 10; slot++ {
 		si := st.slots[slot]
 		if h, ok := numUint64(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_hSelectedHero", si.prIndex)); ok && h != 0 && h != 0xFFFFFF {
@@ -544,12 +575,12 @@ func (st *replayState) snapshotInterval(raw int) {
 			st.slots[slot].heroID = id
 		}
 		hero := st.p.FindEntityByHandle(si.heroHandle)
-		var iv intervalData
+		var iv events.Interval
 		iv.Slot = slot
 		iv.Time = raw
 		iv.HeroID = si.heroID
 		if hero != nil {
-			iv.Unit = unitToHeroName(hero.GetClassName())
+			iv.Unit = catalog.UnitToHeroName(hero.GetClassName())
 			if v, ok := numInt(hero, "m_lifeState"); ok {
 				iv.LifeState = v
 				iv.HasLifeState = true
@@ -568,7 +599,7 @@ func (st *replayState) snapshotInterval(raw int) {
 		if si.heroHandle != 0 && si.heroHandle != 0xFFFFFF {
 			if unit := st.heroName(si.heroHandle); unit != "" {
 				st.slots[slot].hero = unit
-				st.ag.setSlot(slot, si.team, unit)
+				st.handler.Slot(events.Slot{Slot: slot, Team: si.team, Hero: unit})
 			}
 		}
 		iv.Kills, _ = numInt(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_iKills", si.prIndex))
@@ -603,7 +634,7 @@ func (st *replayState) snapshotInterval(raw int) {
 	}
 	for _, iv := range ivs {
 		iv.Time -= st.gameStart
-		st.ag.onInterval(iv)
+		st.handler.Interval(iv)
 	}
 	st.emitAbilityLevels(raw - st.gameStart)
 }
@@ -611,7 +642,7 @@ func (st *replayState) snapshotInterval(raw int) {
 func (st *replayState) flushIntervals() {
 	for _, iv := range st.pendingIntervals {
 		iv.Time -= st.gameStart
-		st.ag.onInterval(iv)
+		st.handler.Interval(iv)
 	}
 	st.pendingIntervals = nil
 }
@@ -627,7 +658,7 @@ func (st *replayState) scanStartingItems(t int) {
 			continue
 		}
 		found := false
-		heroName := unitToHeroName(hero.GetClassName())
+		heroName := catalog.UnitToHeroName(hero.GetClassName())
 		for i := 0; i < 9; i++ {
 			h, ok := numUint64(hero, fmt.Sprintf("m_hItems.%04d", i))
 			if !ok || h == 0 || h == 0xFFFFFF {
@@ -635,8 +666,8 @@ func (st *replayState) scanStartingItems(t int) {
 			}
 			found = true
 			item := st.entityName(h)
-			if _, ok := ItemWardCosts[item]; ok {
-				st.ag.onPurchase(combatEvent{Time: t, ValueName: item, TargetName: heroName})
+			if _, ok := catalog.ItemWardCosts[item]; ok {
+				st.handler.Combat(events.Combat{Time: t, Type: events.CombatPurchase, ValueName: item, TargetName: heroName})
 			}
 		}
 		if found {
@@ -652,7 +683,7 @@ func (st *replayState) emitAbilityLevels(t int) {
 		if hero == nil {
 			continue
 		}
-		heroName := unitToHeroName(hero.GetClassName())
+		heroName := catalog.UnitToHeroName(hero.GetClassName())
 		for i := 0; i < 32; i++ {
 			h, ok := numUint64(hero, fmt.Sprintf("m_vecAbilities.%04d", i))
 			if !ok || h == 0 || h == 0xFFFFFF {
@@ -666,7 +697,7 @@ func (st *replayState) emitAbilityLevels(t int) {
 				name = st.entityName(h)
 				st.abilityNames[h] = name
 			}
-			if !PurgeTalents[name] {
+			if !catalog.PurgeTalents[name] {
 				continue
 			}
 			ae := st.p.FindEntityByHandle(h)
@@ -674,7 +705,7 @@ func (st *replayState) emitAbilityLevels(t int) {
 				continue
 			}
 			lvl, _ := numInt(ae, "m_iLevel")
-			st.ag.onAbilityLevel(heroName, name, lvl, t)
+			st.handler.AbilityLevel(events.AbilityLevel{Hero: heroName, Ability: name, Level: lvl, Time: t})
 		}
 	}
 }
@@ -694,35 +725,47 @@ func (st *replayState) entityName(handle uint64) string {
 	return ""
 }
 
-func (st *replayState) finishRoster() {
+func (st *replayState) finishRoster() error {
 	if !st.startKnown {
 		st.gameStart = 0
 		st.startKnown = true
 		st.flushIntervals()
 		st.flushPending()
 	}
-	if len(st.ag.roster) == 0 {
-		players := make([]playerInfo, 0, 10)
-		for slot := 0; slot < 10; slot++ {
-			si := st.slots[slot]
-			hero := st.slots[slot].hero
-			if hero == "" {
-				hero = st.heroName(si.heroHandle)
-			}
-			players = append(players, playerInfo{
-				Slot:    slot,
-				SteamID: si.steamID,
-				Hero:    hero,
-				Name:    si.name,
-				Team:    si.team,
-			})
-		}
-		dur := float64(st.lastCombatTime - st.gameStart)
-		if dur < 0 {
-			dur = 0
-		}
-		st.ag.setEpilogue(st.matchID, shortestFloat32(dur), st.lastTBKillTeam == teamDire, players)
+	if st.gotEpilogue {
+		return nil
 	}
+	players := make([]events.PlayerInfo, 0, 10)
+	for slot := 0; slot < 10; slot++ {
+		si := st.slots[slot]
+		hero := si.hero
+		if hero == "" {
+			hero = st.heroName(si.heroHandle)
+		}
+		players = append(players, events.PlayerInfo{
+			Slot:    slot,
+			SteamID: si.steamID,
+			Hero:    hero,
+			Name:    si.name,
+			Team:    si.team,
+		})
+	}
+	dur := float64(st.lastCombatTime - st.gameStart)
+	if dur < 0 {
+		dur = 0
+	}
+	st.handler.Epilogue(events.Epilogue{
+		MatchID:     st.matchID,
+		DurationSec: dur,
+		RadiantWin:  st.lastTBKillTeam == teamDire,
+		Players:     players,
+	})
+	return nil
+}
+
+func float32ToFloat64(v float32) float64 {
+	f, _ := strconv.ParseFloat(strconv.FormatFloat(float64(v), 'g', -1, 32), 64)
+	return f
 }
 
 func playerIDOf(e *manta.Entity) int32 {

@@ -1,70 +1,16 @@
-package stats
+package aggregate
 
 import (
 	"math"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/drawiks/manta-cli/internal/catalog"
+	"github.com/drawiks/manta-cli/internal/events"
+	"github.com/drawiks/manta-cli/internal/model"
+	"github.com/drawiks/manta-cli/internal/roles"
 )
-
-// playerInfo is one roster entry from CDemoFileInfo (or the PlayerResource
-// fallback). Slot is the 0..9 index the parser assigns, not a raw PR index.
-type playerInfo struct {
-	Slot    int
-	SteamID int64
-	Hero    string
-	Name    string
-	Team    string
-}
-
-// intervalData is one per-second snapshot of a player.
-type intervalData struct {
-	Slot             int
-	Time             int
-	Unit             string
-	LifeState        int
-	HasLifeState     bool
-	Gold             int
-	TowerDamage      int
-	LastHits         int
-	XP               int
-	X, Y             float64
-	HasPos           bool
-	Stuns            float64
-	HeroID           int
-	Level            int
-	Kills            int
-	Deaths           int
-	Assists          int
-	CampsStacked     int
-	CreepsStacked    int
-	RunePickups      int
-	WisdomsCaptured  int
-	WatchersCaptured int
-	LotusesGathered  int
-	SentryWards      int
-	Networth         int
-}
-
-// combatEvent is a resolved combat-log entry.
-type combatEvent struct {
-	Time             int
-	Type             string
-	AttackerName     string
-	TargetName       string
-	SourceName       string
-	TargetSourceName string
-	Inflictor        string
-	ValueName        string
-	AttackerHero     bool
-	TargetHero       bool
-	AttackerIllusion bool
-	TargetIllusion   bool
-	Value            int
-	StunDuration     float64
-	GoldReason       int
-	AbilityLevel     int
-}
 
 type srcKey struct {
 	Attacker  string
@@ -105,23 +51,23 @@ type talentKey struct {
 	Talent string
 }
 
-type aggregator struct {
-	m *Result
+type Aggregator struct {
+	m *model.Result
 
-	roster   []playerInfo
+	roster   []events.PlayerInfo
 	slotHero map[int]string
 	slotTeam map[int]string
 	heroTeam map[string]string
 
-	lastInterval     map[int]intervalData
+	lastInterval     map[int]events.Interval
 	lastIntervalTime int
 
 	deadSecondsBySlot map[int]float64
 	lastLifeState     map[int]int
 	stateTime         map[int]int
 
-	roleSamples map[int]*roleSamples
-	roleFarm    map[int]roleFarm
+	roleSamples map[int]*roles.Samples
+	roleFarm    map[int]roles.Farm
 
 	healingByAttacker     map[string]int
 	heroDamageByAttacker  map[string]int
@@ -135,8 +81,8 @@ type aggregator struct {
 	healsByTarget map[string][]healActive
 	shardAt       map[string]int
 	talents       map[talentKey]int
-	durations     [kindCount]map[srcKey]float64
-	active        [kindCount]map[modKey][]activeMod
+	durations     [catalog.KindCount]map[srcKey]float64
+	active        [catalog.KindCount]map[modKey][]activeMod
 
 	goldSpentSmoke map[string]int
 	goldSpentDust  map[string]int
@@ -145,21 +91,21 @@ type aggregator struct {
 
 	firstBloodSlot int
 
-	mods map[string]modClass
+	mods map[string]catalog.ModClass
 }
 
-func newAggregator() *aggregator {
-	a := &aggregator{
-		m:                     &Result{},
+func New() *Aggregator {
+	a := &Aggregator{
+		m:                     &model.Result{},
 		slotHero:              map[int]string{},
 		slotTeam:              map[int]string{},
 		heroTeam:              map[string]string{},
-		lastInterval:          map[int]intervalData{},
+		lastInterval:          map[int]events.Interval{},
 		deadSecondsBySlot:     map[int]float64{},
 		lastLifeState:         map[int]int{},
 		stateTime:             map[int]int{},
-		roleSamples:           map[int]*roleSamples{},
-		roleFarm:              map[int]roleFarm{},
+		roleSamples:           map[int]*roles.Samples{},
+		roleFarm:              map[int]roles.Farm{},
 		healingByAttacker:     map[string]int{},
 		heroDamageByAttacker:  map[string]int{},
 		damageTakenByTarget:   map[string]int{},
@@ -176,54 +122,54 @@ func newAggregator() *aggregator {
 		goldLostByHero:        map[string]int{},
 		courierKills:          map[string]int{},
 		firstBloodSlot:        -1,
-		mods:                  map[string]modClass{},
+		mods:                  map[string]catalog.ModClass{},
 	}
 	return a
 }
 
-func (a *aggregator) setEpilogue(matchID int64, duration float64, radiantWin bool, players []playerInfo) {
-	a.m.MatchID = matchID
-	a.m.DurationSec = duration
-	a.m.RadiantWin = radiantWin
-	a.roster = players
+func (a *Aggregator) Epilogue(e events.Epilogue) {
+	a.m.MatchID = e.MatchID
+	a.m.DurationSec = e.DurationSec
+	a.m.RadiantWin = e.RadiantWin
+	a.roster = e.Players
 }
 
-func (a *aggregator) setSlot(slot int, team, hero string) {
-	a.slotTeam[slot] = team
-	if hero != "" {
-		a.slotHero[slot] = hero
-		a.heroTeam[heroKey(hero)] = team
+func (a *Aggregator) Slot(e events.Slot) {
+	a.slotTeam[e.Slot] = e.Team
+	if e.Hero != "" {
+		a.slotHero[e.Slot] = e.Hero
+		a.heroTeam[catalog.HeroKey(e.Hero)] = e.Team
 	}
 }
 
-func (a *aggregator) classify(inf string) modClass {
+func (a *Aggregator) classify(inf string) catalog.ModClass {
 	if c, ok := a.mods[inf]; ok {
 		return c
 	}
-	c := classifyModifier(inf)
+	c := catalog.ClassifyModifier(inf)
 	a.mods[inf] = c
 	return c
 }
 
-func (a *aggregator) gateOK(gate purgeGate, talent, attacker string, t int) bool {
+func (a *Aggregator) gateOK(gate catalog.PurgeGate, talent, attacker string, t int) bool {
 	switch gate {
-	case gateShard:
-		at, ok := a.shardAt[heroKey(attacker)]
+	case catalog.GateShard:
+		at, ok := a.shardAt[catalog.HeroKey(attacker)]
 		return ok && t >= at
-	case gateTalent:
-		at, ok := a.talents[talentKey{heroKey(attacker), talent}]
+	case catalog.GateTalent:
+		at, ok := a.talents[talentKey{catalog.HeroKey(attacker), talent}]
 		return ok && t >= at
 	}
 	return true
 }
 
-func (a *aggregator) heroIsAlly(x, y string) bool {
-	tx, okX := a.heroTeam[heroKey(x)]
-	ty, okY := a.heroTeam[heroKey(y)]
+func (a *Aggregator) heroIsAlly(x, y string) bool {
+	tx, okX := a.heroTeam[catalog.HeroKey(x)]
+	ty, okY := a.heroTeam[catalog.HeroKey(y)]
 	return okX && okY && tx == ty
 }
 
-func (a *aggregator) onInterval(iv intervalData) {
+func (a *Aggregator) Interval(iv events.Interval) {
 	a.lastInterval[iv.Slot] = iv
 	if iv.Time > a.lastIntervalTime {
 		a.lastIntervalTime = iv.Time
@@ -235,20 +181,20 @@ func (a *aggregator) onInterval(iv intervalData) {
 		a.lastLifeState[iv.Slot] = iv.LifeState
 		a.stateTime[iv.Slot] = iv.Time
 	}
-	if iv.Time >= 0 && iv.Time <= roleWindowSec {
-		a.roleFarm[iv.Slot] = roleFarm{networth: iv.Networth, lh: iv.LastHits, xp: iv.XP}
+	if iv.Time >= 0 && iv.Time <= roles.WindowSec {
+		a.roleFarm[iv.Slot] = roles.Farm{Networth: iv.Networth, LH: iv.LastHits, XP: iv.XP}
 		if iv.HasPos && (!iv.HasLifeState || iv.LifeState == 0) {
 			rs := a.roleSamples[iv.Slot]
 			if rs == nil {
-				rs = &roleSamples{}
+				rs = &roles.Samples{}
 				a.roleSamples[iv.Slot] = rs
 			}
-			rs.sample(iv.X, iv.Y)
+			rs.Sample(iv.X, iv.Y)
 		}
 	}
 }
 
-func (a *aggregator) onDamage(ev combatEvent) {
+func (a *Aggregator) onDamage(ev events.Combat) {
 	key := ev.AttackerName
 	if strings.HasPrefix(ev.SourceName, "npc_dota_hero_") {
 		key = ev.SourceName
@@ -256,17 +202,17 @@ func (a *aggregator) onDamage(ev combatEvent) {
 	attackerHero := ev.AttackerHero && !ev.AttackerIllusion
 	targetHero := ev.TargetHero && !ev.TargetIllusion
 	if targetHero && key != ev.TargetName {
-		a.heroDamageByAttacker[heroKey(key)] += ev.Value
+		a.heroDamageByAttacker[catalog.HeroKey(key)] += ev.Value
 	}
-	if attackerHero && isBuilding(ev.TargetName) {
-		a.towerDamageByAttacker[heroKey(key)] += ev.Value
+	if attackerHero && catalog.IsBuilding(ev.TargetName) {
+		a.towerDamageByAttacker[catalog.HeroKey(key)] += ev.Value
 	}
 	if targetHero && attackerHero && key != ev.TargetName {
-		a.damageTakenByTarget[heroKey(ev.TargetName)] += ev.Value
+		a.damageTakenByTarget[catalog.HeroKey(ev.TargetName)] += ev.Value
 	}
 }
 
-func (a *aggregator) onHeal(ev combatEvent) {
+func (a *Aggregator) onHeal(ev events.Combat) {
 	if !ev.AttackerHero || !ev.TargetHero {
 		return
 	}
@@ -281,16 +227,16 @@ func (a *aggregator) onHeal(ev combatEvent) {
 	if !a.heroIsAlly(attacker, target) {
 		return
 	}
-	a.healingByAttacker[heroKey(attacker)] += ev.Value
-	if InstantHealItems[ev.Inflictor] {
-		sk := srcKey{heroKey(attacker), ev.Inflictor}
+	a.healingByAttacker[catalog.HeroKey(attacker)] += ev.Value
+	if catalog.InstantHealItems[ev.Inflictor] {
+		sk := srcKey{catalog.HeroKey(attacker), ev.Inflictor}
 		agg := a.healSources[sk]
 		agg.Value += float64(ev.Value)
 		a.healSources[sk] = agg
 	}
 }
 
-func (a *aggregator) healTick(target string, ev combatEvent) {
+func (a *Aggregator) healTick(target string, ev events.Combat) {
 	if ev.Inflictor != "" && ev.Inflictor != "dota_unknown" {
 		return
 	}
@@ -307,7 +253,7 @@ func (a *aggregator) healTick(target string, ev combatEvent) {
 	if !found || ev.Value <= 0 {
 		return
 	}
-	hk := heroKey(best.Attacker)
+	hk := catalog.HeroKey(best.Attacker)
 	a.healingByAttacker[hk] += ev.Value
 	sk := srcKey{hk, best.Clean}
 	agg := a.healSources[sk]
@@ -315,7 +261,7 @@ func (a *aggregator) healTick(target string, ev combatEvent) {
 	a.healSources[sk] = agg
 }
 
-func (a *aggregator) removeHealActive(target, attacker, clean string) {
+func (a *Aggregator) removeHealActive(target, attacker, clean string) {
 	list := a.healsByTarget[target]
 	for i := len(list) - 1; i >= 0; i-- {
 		if list[i].Attacker == attacker && list[i].Clean == clean {
@@ -325,7 +271,7 @@ func (a *aggregator) removeHealActive(target, attacker, clean string) {
 	}
 }
 
-func (a *aggregator) push(kind modKind, attacker, target, clean, category string, t int) {
+func (a *Aggregator) push(kind catalog.ModKind, attacker, target, clean, category string, t int) {
 	k := modKey{attacker, target, clean}
 	m := a.active[kind]
 	if m == nil {
@@ -335,7 +281,7 @@ func (a *aggregator) push(kind modKind, attacker, target, clean, category string
 	m[k] = append(m[k], activeMod{Inflictor: clean, Category: category, AddTime: t})
 }
 
-func (a *aggregator) popDuration(kind modKind, attacker, target, clean string, t int) {
+func (a *Aggregator) popDuration(kind catalog.ModKind, attacker, target, clean string, t int) {
 	k := modKey{attacker, target, clean}
 	list := a.active[kind][k]
 	for i := len(list) - 1; i >= 0; i-- {
@@ -348,47 +294,47 @@ func (a *aggregator) popDuration(kind modKind, attacker, target, clean string, t
 				m = map[srcKey]float64{}
 				a.durations[kind] = m
 			}
-			m[srcKey{heroKey(attacker), clean}] += d
+			m[srcKey{catalog.HeroKey(attacker), clean}] += d
 		}
 		a.active[kind][k] = append(list[:i], list[i+1:]...)
 		return
 	}
 }
 
-func (a *aggregator) popHeal(attacker, target, clean string, t int) {
+func (a *Aggregator) popHeal(attacker, target, clean string, t int) {
 	k := modKey{attacker, target, clean}
-	list := a.active[kindHeal][k]
+	list := a.active[catalog.KindHeal][k]
 	for i := len(list) - 1; i >= 0; i-- {
 		if list[i].Inflictor != clean {
 			continue
 		}
 		if d := float64(t - list[i].AddTime); d > 0 {
-			sk := srcKey{heroKey(attacker), clean}
+			sk := srcKey{catalog.HeroKey(attacker), clean}
 			agg := a.healSources[sk]
 			agg.Duration += d
 			a.healSources[sk] = agg
 		}
-		a.active[kindHeal][k] = append(list[:i], list[i+1:]...)
+		a.active[catalog.KindHeal][k] = append(list[:i], list[i+1:]...)
 		return
 	}
 }
 
-func (a *aggregator) popBuff(attacker, target, clean string, t int) {
+func (a *Aggregator) popBuff(attacker, target, clean string, t int) {
 	k := modKey{attacker, target, clean}
-	list := a.active[kindBuff][k]
+	list := a.active[catalog.KindBuff][k]
 	for i := len(list) - 1; i >= 0; i-- {
 		if list[i].Inflictor != clean {
 			continue
 		}
 		if d := float64(t - list[i].AddTime); d > 0 {
-			a.buffSources[buffKey{heroKey(attacker), list[i].Category, clean}] += d
+			a.buffSources[buffKey{catalog.HeroKey(attacker), list[i].Category, clean}] += d
 		}
-		a.active[kindBuff][k] = append(list[:i], list[i+1:]...)
+		a.active[catalog.KindBuff][k] = append(list[:i], list[i+1:]...)
 		return
 	}
 }
 
-func (a *aggregator) onModifier(ev combatEvent, add bool) {
+func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 	if !ev.TargetHero || ev.TargetIllusion {
 		return
 	}
@@ -406,136 +352,170 @@ func (a *aggregator) onModifier(ev combatEvent, add bool) {
 	}
 	c := a.classify(inf)
 	if add {
-		if c.purge && a.heroIsAlly(attacker, target) && a.gateOK(c.gate, c.talent, attacker, ev.Time) {
-			a.purgeCounts[srcKey{heroKey(attacker), c.clean}]++
+		if c.Purge && a.heroIsAlly(attacker, target) && a.gateOK(c.Gate, c.Talent, attacker, ev.Time) {
+			a.purgeCounts[srcKey{catalog.HeroKey(attacker), c.Clean}]++
 		}
-		switch c.kind {
-		case kindBreak, kindFear, kindRoot, kindLeash, kindTrap, kindTaunt, kindSilence, kindDisarm:
+		switch c.Kind {
+		case catalog.KindBreak, catalog.KindFear, catalog.KindRoot, catalog.KindLeash, catalog.KindTrap, catalog.KindTaunt, catalog.KindSilence, catalog.KindDisarm:
 			if !a.heroIsAlly(attacker, target) {
-				a.push(c.kind, attacker, target, c.clean, "", ev.Time)
+				a.push(c.Kind, attacker, target, c.Clean, "", ev.Time)
 			}
-		case kindHeal:
-			a.push(kindHeal, attacker, target, c.clean, "", ev.Time)
-			a.healsByTarget[target] = append(a.healsByTarget[target], healActive{Attacker: attacker, Clean: c.clean, AddTime: ev.Time})
-		case kindBuff:
-			if !trackedBuff[c.category] || !a.heroIsAlly(attacker, target) {
+		case catalog.KindHeal:
+			a.push(catalog.KindHeal, attacker, target, c.Clean, "", ev.Time)
+			a.healsByTarget[target] = append(a.healsByTarget[target], healActive{Attacker: attacker, Clean: c.Clean, AddTime: ev.Time})
+		case catalog.KindBuff:
+			if !catalog.TrackedBuff[c.Category] || !a.heroIsAlly(attacker, target) {
 				return
 			}
-			a.push(kindBuff, attacker, target, c.clean, c.category, ev.Time)
+			a.push(catalog.KindBuff, attacker, target, c.Clean, c.Category, ev.Time)
 			if ev.StunDuration > 0 {
-				a.stunSources[srcKey{heroKey(attacker), c.clean}] += ev.StunDuration
+				a.stunSources[srcKey{catalog.HeroKey(attacker), c.Clean}] += ev.StunDuration
 			}
 		}
 		return
 	}
-	switch c.kind {
-	case kindBreak, kindFear, kindRoot, kindLeash, kindTrap, kindTaunt, kindSilence, kindDisarm:
+	switch c.Kind {
+	case catalog.KindBreak, catalog.KindFear, catalog.KindRoot, catalog.KindLeash, catalog.KindTrap, catalog.KindTaunt, catalog.KindSilence, catalog.KindDisarm:
 		if !a.heroIsAlly(attacker, target) {
-			a.popDuration(c.kind, attacker, target, c.clean, ev.Time)
+			a.popDuration(c.Kind, attacker, target, c.Clean, ev.Time)
 		}
-	case kindHeal:
-		a.popHeal(attacker, target, c.clean, ev.Time)
-		a.removeHealActive(target, attacker, c.clean)
-	case kindBuff:
+	case catalog.KindHeal:
+		a.popHeal(attacker, target, c.Clean, ev.Time)
+		a.removeHealActive(target, attacker, c.Clean)
+	case catalog.KindBuff:
 		if a.heroIsAlly(attacker, target) {
-			a.popBuff(attacker, target, c.clean, ev.Time)
+			a.popBuff(attacker, target, c.Clean, ev.Time)
 		}
 	}
 }
 
-func (a *aggregator) onPurchase(ev combatEvent) {
+func (a *Aggregator) onPurchase(ev events.Combat) {
 	if ev.ValueName == "" {
 		return
 	}
 	if ev.ValueName == "item_aghanims_shard" && ev.TargetName != "" {
-		hk := heroKey(ev.TargetName)
+		hk := catalog.HeroKey(ev.TargetName)
 		if _, ok := a.shardAt[hk]; !ok {
 			a.shardAt[hk] = ev.Time
 		}
 		return
 	}
-	cost, ok := ItemWardCosts[ev.ValueName]
+	cost, ok := catalog.ItemWardCosts[ev.ValueName]
 	if !ok {
 		return
 	}
 	switch {
 	case strings.Contains(ev.ValueName, "smoke"):
-		a.goldSpentSmoke[heroKey(ev.TargetName)] += cost
+		a.goldSpentSmoke[catalog.HeroKey(ev.TargetName)] += cost
 	case strings.Contains(ev.ValueName, "dust"):
-		a.goldSpentDust[heroKey(ev.TargetName)] += cost
+		a.goldSpentDust[catalog.HeroKey(ev.TargetName)] += cost
 	}
 }
 
-func (a *aggregator) onGold(ev combatEvent) {
+func (a *Aggregator) onGold(ev events.Combat) {
 	if ev.GoldReason == 1 && ev.TargetName != "" {
 		v := ev.Value
 		if v < 0 {
 			v = -v
 		}
-		a.goldLostByHero[heroKey(ev.TargetName)] += v
+		a.goldLostByHero[catalog.HeroKey(ev.TargetName)] += v
 	}
 }
 
-func (a *aggregator) onDeath(ev combatEvent) {
+func (a *Aggregator) onDeath(ev events.Combat) {
 	if ev.TargetName == "npc_dota_courier" && ev.SourceName != "" {
-		a.courierKills[heroKey(ev.SourceName)]++
+		a.courierKills[catalog.HeroKey(ev.SourceName)]++
 	}
 }
 
-func (a *aggregator) onAbility(ev combatEvent) {
+func (a *Aggregator) onAbility(ev events.Combat) {
 	inf := ev.Inflictor
 	if inf == "" || !ev.AttackerHero || ev.AttackerName == "" {
 		return
 	}
-	hk := heroKey(ev.AttackerName)
+	hk := catalog.HeroKey(ev.AttackerName)
 	if _, ok := a.heroTeam[hk]; !ok {
 		return
 	}
-	if talent, ok := TalentGlobalAbilities[inf]; ok {
-		if a.gateOK(gateTalent, talent, ev.AttackerName, ev.Time) {
-			a.purgeCounts[srcKey{hk, canonicalName(inf)}]++
+	if talent, ok := catalog.TalentGlobalAbilities[inf]; ok {
+		if a.gateOK(catalog.GateTalent, talent, ev.AttackerName, ev.Time) {
+			a.purgeCounts[srcKey{hk, catalog.CanonicalName(inf)}]++
 		}
 		return
 	}
 	target := ev.TargetName
-	if talent, ok := TalentPurgeAbilities[inf]; ok &&
+	if talent, ok := catalog.TalentPurgeAbilities[inf]; ok &&
 		ev.TargetHero && !ev.TargetIllusion &&
 		target != "" && ev.AttackerName != target && a.heroIsAlly(ev.AttackerName, target) &&
-		a.gateOK(gateTalent, talent, ev.AttackerName, ev.Time) {
-		a.purgeCounts[srcKey{hk, canonicalName(inf)}]++
+		a.gateOK(catalog.GateTalent, talent, ev.AttackerName, ev.Time) {
+		a.purgeCounts[srcKey{hk, catalog.CanonicalName(inf)}]++
 	}
 }
 
-func (a *aggregator) onAbilityLevel(hero, ability string, level, t int) {
-	if level <= 0 || hero == "" || !PurgeTalents[ability] {
+func (a *Aggregator) onAbilityLevel(hero, ability string, level, t int) {
+	if level <= 0 || hero == "" || !catalog.PurgeTalents[ability] {
 		return
 	}
-	k := talentKey{heroKey(hero), ability}
+	k := talentKey{catalog.HeroKey(hero), ability}
 	if _, ok := a.talents[k]; !ok {
 		a.talents[k] = t
 	}
 }
 
-func (a *aggregator) onMiniboss(slot, t int) {
+func (a *Aggregator) onMiniboss(slot, t int) {
 	hero, ok := a.slotHero[slot]
 	if !ok {
 		return
 	}
-	hk := heroKey(hero)
+	hk := catalog.HeroKey(hero)
 	if at, ok := a.shardAt[hk]; !ok || t < at {
 		a.shardAt[hk] = t
 	}
 }
 
-func (a *aggregator) onFirstBlood(slot int) {
+func (a *Aggregator) onFirstBlood(slot int) {
 	a.firstBloodSlot = slot
 }
 
-func (a *aggregator) result() *Result {
-	players := append([]playerInfo(nil), a.roster...)
+func (a *Aggregator) Combat(ev events.Combat) {
+	switch ev.Type {
+	case events.CombatDamage:
+		a.onDamage(ev)
+	case events.CombatHeal:
+		a.onHeal(ev)
+	case events.CombatModifierAdd:
+		a.onModifier(ev, true)
+	case events.CombatModifierRemove:
+		a.onModifier(ev, false)
+	case events.CombatPurchase:
+		a.onPurchase(ev)
+	case events.CombatGold:
+		a.onGold(ev)
+	case events.CombatDeath:
+		a.onDeath(ev)
+	case events.CombatAbility:
+		a.onAbility(ev)
+	}
+}
+
+func (a *Aggregator) Chat(ev events.Chat) {
+	switch ev.Kind {
+	case events.ChatFirstBlood:
+		a.onFirstBlood(ev.Slot)
+	case events.ChatMiniboss:
+		a.onMiniboss(ev.Slot, ev.Time)
+	}
+}
+
+func (a *Aggregator) AbilityLevel(e events.AbilityLevel) {
+	a.onAbilityLevel(e.Hero, e.Ability, e.Level, e.Time)
+}
+
+func (a *Aggregator) Result() *model.Result {
+	players := append([]events.PlayerInfo(nil), a.roster...)
 	if len(players) == 0 {
 		for slot, hero := range a.slotHero {
-			players = append(players, playerInfo{Slot: slot, Hero: hero, Team: a.slotTeam[slot]})
+			players = append(players, events.PlayerInfo{Slot: slot, Hero: hero, Team: a.slotTeam[slot]})
 		}
 	}
 	for i := range players {
@@ -548,7 +528,7 @@ func (a *aggregator) result() *Result {
 	}
 	sort.Slice(players, func(i, j int) bool { return players[i].Slot < players[j].Slot })
 
-	a.m.Players = make([]Player, len(players))
+	a.m.Players = make([]model.Player, len(players))
 	heroKeys := make([]string, len(players))
 	for i := range players {
 		p := &players[i]
@@ -556,7 +536,7 @@ func (a *aggregator) result() *Result {
 		mp.SteamID = p.SteamID
 		mp.PlayerID = p.Slot
 		mp.Hero = strings.TrimPrefix(p.Hero, "npc_dota_hero_")
-		mp.HeroID = heroID(p.Hero)
+		mp.HeroID = catalog.HeroID(p.Hero)
 		mp.Team = p.Team
 		mp.Name = p.Name
 		if iv, ok := a.lastInterval[p.Slot]; ok {
@@ -581,7 +561,7 @@ func (a *aggregator) result() *Result {
 				mp.XPM = int(math.Round(float64(iv.XP) / minutes))
 			}
 		}
-		hk := heroKey(p.Hero)
+		hk := catalog.HeroKey(p.Hero)
 		heroKeys[i] = hk
 		mp.Healing = a.healingByAttacker[hk]
 		mp.HeroDamage = a.heroDamageByAttacker[hk]
@@ -594,14 +574,14 @@ func (a *aggregator) result() *Result {
 		mp.TimeDead = math.Round(a.deadSecondsBySlot[p.Slot])
 	}
 
-	byHero := make(map[string][]*Player, len(a.m.Players))
+	byHero := make(map[string][]*model.Player, len(a.m.Players))
 	for i := range a.m.Players {
 		byHero[heroKeys[i]] = append(byHero[heroKeys[i]], &a.m.Players[i])
 	}
 
 	for k, v := range a.stunSources {
 		for _, mp := range byHero[k.Attacker] {
-			mp.StunSources = append(mp.StunSources, SourceEntry{
+			mp.StunSources = append(mp.StunSources, model.SourceEntry{
 				Inflictor: k.Inflictor,
 				Category:  "stun",
 				Duration:  v,
@@ -610,7 +590,7 @@ func (a *aggregator) result() *Result {
 	}
 	for k, v := range a.buffSources {
 		for _, mp := range byHero[k.Attacker] {
-			mp.BuffSources = append(mp.BuffSources, SourceEntry{
+			mp.BuffSources = append(mp.BuffSources, model.SourceEntry{
 				Inflictor: k.Inflictor,
 				Category:  k.Category,
 				Duration:  math.Round(v),
@@ -620,7 +600,7 @@ func (a *aggregator) result() *Result {
 	}
 	for k, n := range a.purgeCounts {
 		for _, mp := range byHero[k.Attacker] {
-			mp.BuffSources = append(mp.BuffSources, SourceEntry{
+			mp.BuffSources = append(mp.BuffSources, model.SourceEntry{
 				Inflictor: k.Inflictor,
 				Category:  "purge",
 				Count:     n,
@@ -629,24 +609,24 @@ func (a *aggregator) result() *Result {
 	}
 
 	specs := []struct {
-		kind     modKind
+		kind     catalog.ModKind
 		category string
-		entries  func(*Player) *[]SourceEntry
-		total    func(*Player) *float64
+		entries  func(*model.Player) *[]model.SourceEntry
+		total    func(*model.Player) *float64
 	}{
-		{kindBreak, "break", func(p *Player) *[]SourceEntry { return &p.BreakSources }, func(p *Player) *float64 { return &p.BreakDuration }},
-		{kindFear, "fear", func(p *Player) *[]SourceEntry { return &p.FearSources }, func(p *Player) *float64 { return &p.FearDuration }},
-		{kindRoot, "root", func(p *Player) *[]SourceEntry { return &p.RootSources }, func(p *Player) *float64 { return &p.RootsDuration }},
-		{kindLeash, "leash", func(p *Player) *[]SourceEntry { return &p.LeashSources }, func(p *Player) *float64 { return &p.LeashDuration }},
-		{kindTrap, "trap", func(p *Player) *[]SourceEntry { return &p.TrapSources }, func(p *Player) *float64 { return &p.TrapDuration }},
-		{kindTaunt, "taunt", func(p *Player) *[]SourceEntry { return &p.TauntSources }, func(p *Player) *float64 { return &p.TauntDuration }},
-		{kindSilence, "silence", func(p *Player) *[]SourceEntry { return &p.SilenceSources }, func(p *Player) *float64 { return &p.SilenceDuration }},
-		{kindDisarm, "disarm", func(p *Player) *[]SourceEntry { return &p.DisarmSources }, func(p *Player) *float64 { return &p.DisarmDuration }},
+		{catalog.KindBreak, "break", func(p *model.Player) *[]model.SourceEntry { return &p.BreakSources }, func(p *model.Player) *float64 { return &p.BreakDuration }},
+		{catalog.KindFear, "fear", func(p *model.Player) *[]model.SourceEntry { return &p.FearSources }, func(p *model.Player) *float64 { return &p.FearDuration }},
+		{catalog.KindRoot, "root", func(p *model.Player) *[]model.SourceEntry { return &p.RootSources }, func(p *model.Player) *float64 { return &p.RootsDuration }},
+		{catalog.KindLeash, "leash", func(p *model.Player) *[]model.SourceEntry { return &p.LeashSources }, func(p *model.Player) *float64 { return &p.LeashDuration }},
+		{catalog.KindTrap, "trap", func(p *model.Player) *[]model.SourceEntry { return &p.TrapSources }, func(p *model.Player) *float64 { return &p.TrapDuration }},
+		{catalog.KindTaunt, "taunt", func(p *model.Player) *[]model.SourceEntry { return &p.TauntSources }, func(p *model.Player) *float64 { return &p.TauntDuration }},
+		{catalog.KindSilence, "silence", func(p *model.Player) *[]model.SourceEntry { return &p.SilenceSources }, func(p *model.Player) *float64 { return &p.SilenceDuration }},
+		{catalog.KindDisarm, "disarm", func(p *model.Player) *[]model.SourceEntry { return &p.DisarmSources }, func(p *model.Player) *float64 { return &p.DisarmDuration }},
 	}
 	for _, s := range specs {
 		for k, v := range a.durations[s.kind] {
 			for _, mp := range byHero[k.Attacker] {
-				*s.entries(mp) = append(*s.entries(mp), SourceEntry{
+				*s.entries(mp) = append(*s.entries(mp), model.SourceEntry{
 					Inflictor: k.Inflictor,
 					Category:  s.category,
 					Duration:  math.Round(v),
@@ -657,7 +637,7 @@ func (a *aggregator) result() *Result {
 	}
 	for k, agg := range a.healSources {
 		for _, mp := range byHero[k.Attacker] {
-			entry := SourceEntry{Inflictor: k.Inflictor, Category: "heal"}
+			entry := model.SourceEntry{Inflictor: k.Inflictor, Category: "heal"}
 			if agg.Duration > 0 {
 				entry.Duration = math.Round(agg.Duration)
 				mp.HealDuration += agg.Duration
@@ -684,26 +664,26 @@ func (a *aggregator) result() *Result {
 		mp.HealValue = math.Round(mp.HealValue)
 	}
 
-	roleInputs := make([]roleInput, 0, len(a.m.Players))
+	roleInputs := make([]roles.Input, 0, len(a.m.Players))
 	for i := range a.m.Players {
 		slot := players[i].Slot
 		farm, ok := a.roleFarm[slot]
-		if !ok || (farm.networth == 0 && farm.lh == 0 && farm.xp == 0) {
+		if !ok || (farm.Networth == 0 && farm.LH == 0 && farm.XP == 0) {
 			if iv, ok := a.lastInterval[slot]; ok {
-				farm = roleFarm{networth: iv.Networth, lh: iv.LastHits, xp: iv.XP}
+				farm = roles.Farm{Networth: iv.Networth, LH: iv.LastHits, XP: iv.XP}
 			}
 		}
-		roleInputs = append(roleInputs, roleInput{
-			p:     &a.m.Players[i],
-			stats: a.roleSamples[slot],
-			farm:  farm,
+		roleInputs = append(roleInputs, roles.Input{
+			P:     &a.m.Players[i],
+			Stats: a.roleSamples[slot],
+			Farm:  farm,
 		})
 	}
-	assignRoles(roleInputs)
+	roles.AssignRoles(roleInputs)
 	return a.m
 }
 
-func sortSources(s []SourceEntry) {
+func sortSources(s []model.SourceEntry) {
 	sort.Slice(s, func(i, j int) bool {
 		if s[i].Duration != s[j].Duration {
 			return s[i].Duration > s[j].Duration
@@ -715,7 +695,7 @@ func sortSources(s []SourceEntry) {
 	})
 }
 
-func sortHealSources(s []SourceEntry) {
+func sortHealSources(s []model.SourceEntry) {
 	sort.Slice(s, func(i, j int) bool {
 		if s[i].Duration != s[j].Duration {
 			return s[i].Duration > s[j].Duration
