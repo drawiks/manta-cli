@@ -29,7 +29,7 @@ go test -fuzz=FuzzDecompress -fuzztime=30s ./internal/replay
 go test -fuzz=FuzzParseStream -fuzztime=30s ./internal/replay
 ```
 
-Seeds live in `testdata/fuzz`. A found input becomes a regression test.
+The targets seed themselves; a found input is written under `testdata/fuzz` and becomes a regression test.
 
 ## Release
 
