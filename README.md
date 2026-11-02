@@ -156,14 +156,7 @@ scoreboard `m_fStuns` total.
 
 ## Validation
 
-Parity was checked against `odota-cli` v0.2.1 on five modern replays. All
-fields match exactly except for these sampling/rounding residuals:
-
-| field | residual | cause |
-|---|---|---|
-| `time_dead` | ±2 s | death/respawn transitions are sampled once per second |
-| `networth` | ±1 | last interval can be one tick before clarity's sample |
-| `gpm` | ±1 | last-interval gold can be one tick before clarity's sample |
+Parity was checked against `odota-cli` v0.2.1 on five modern replays. Every field matches exactly; the harness fails on a single difference.
 
 The parity harness is `tests/replay/parity_test.go`. It expects the external
 corpus (`MANTA_REPLAY_DIR`, default `../../../replays`) with `<id>.dem` and
