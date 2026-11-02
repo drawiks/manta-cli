@@ -13,6 +13,8 @@
 
 # Built CLI binary
 /manta_cli
+/manta-cli
+/manta-cli_*
 /manta_cli_arm64
 /manta_cli_linux_amd64
 /manta_cli_linux_arm64
