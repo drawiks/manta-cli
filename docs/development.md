@@ -15,12 +15,12 @@ make hooks
 make fmt-check
 make lint
 make test
-make test-race
+make test-race-short
 make comments
 make check
 ```
 
-`make bench` runs the aggregation benchmarks. `make parity` needs `MANTA_REPLAY_DIR` pointing at a directory with `<id>.dem` and `<id>.out.json` pairs.
+`make bench` runs the aggregation benchmarks. The pre-push hook uses `-short`, so it never parses the large corpus. `make parity` is the explicit full run and needs `MANTA_REPLAY_DIR` pointing at a directory with `<id>.dem` and `<id>.out.json` pairs.
 
 ## Fuzzing
 

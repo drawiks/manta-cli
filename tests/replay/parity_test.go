@@ -37,6 +37,9 @@ func replayFile(id string) (string, bool) {
 }
 
 func TestParityWithOdotaCLI(t *testing.T) {
+	if testing.Short() {
+		t.Skip("parity needs the external corpus")
+	}
 	dir := replayDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -132,6 +135,9 @@ func itoa(i int) string {
 }
 
 func TestJSONRoundtrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("parity needs the external corpus")
+	}
 	dir := replayDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {

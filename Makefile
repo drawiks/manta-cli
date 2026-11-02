@@ -21,6 +21,14 @@ test:
 test-race:
 	$(GO) test -race -shuffle=on $(PKG)
 
+.PHONY: test-short
+test-short:
+	$(GO) test -short $(PKG)
+
+.PHONY: test-race-short
+test-race-short:
+	$(GO) test -race -short -shuffle=on $(PKG)
+
 .PHONY: bench
 bench:
 	$(GO) test -run '^$$' -bench . ./internal/aggregate
@@ -50,7 +58,7 @@ commits:
 	scripts/check-commits.sh
 
 .PHONY: check
-check: fmt-check lint test comments
+check: fmt-check lint test-short comments
 	$(GO) vet $(PKG)
 
 .PHONY: tools

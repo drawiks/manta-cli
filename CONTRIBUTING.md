@@ -42,4 +42,4 @@ make check
 make parity
 ```
 
-`make check` runs formatting, lint, tests, `go vet` and the comment rules. `make parity` needs the local replay corpus through `MANTA_REPLAY_DIR`.
+`make check` runs formatting, lint, fast tests, `go vet` and the comment rules. The full replay parity is explicit: `make parity` needs the local corpus through `MANTA_REPLAY_DIR`. The pre-push hook runs the fast race suite; the full parity stays out of the hook.
