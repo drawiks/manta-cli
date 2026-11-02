@@ -47,3 +47,7 @@ matches/
 
 # Benchmark harness cache
 bench/__pycache__/
+
+# Local tools and release output
+/bin/
+/dist/

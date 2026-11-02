@@ -1,0 +1,38 @@
+# Install once per clone: lefthook install
+pre-commit:
+  parallel: true
+  commands:
+    gofumpt:
+      glob: "*.go"
+      # The staged paths must be passed explicitly: without the template
+      # lefthook pipes them in and gofumpt refuses to write standard input.
+      run: gofumpt -extra -w {staged_files}
+      # The rewrite happens after git already staged the old bytes, so the
+      # result has to be staged again or the commit keeps the unformatted file.
+      stage_fixed: true
+    lint:
+      glob: "*.go"
+      # The full analysers run on pre-push; a commit should stay fast.
+      run: golangci-lint run --fast-only
+    comments:
+      glob: "*.go"
+      run: scripts/check-comments.sh {staged_files}
+
+commit-msg:
+  commands:
+    message:
+      run: scripts/check-commit-msg.sh "{1}"
+
+pre-push:
+  commands:
+    formatting:
+      run: |
+        test -z "$(gofumpt -l -extra .)" || {
+          gofumpt -l -extra .
+          echo "run 'make fmt' and commit the result"
+          exit 1
+        }
+    vet:
+      run: go vet ./...
+    test:
+      run: go test -race -shuffle=on ./...
