@@ -1,0 +1,68 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.24.x", "stable"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - name: Install tools
+        run: |
+          go install mvdan.cc/gofumpt@v0.12.0
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Format
+        run: test -z "$(gofumpt -l -extra .)"
+      - name: Vet
+        run: go vet ./...
+      - name: Lint
+        run: golangci-lint run
+      - name: Comments
+        run: scripts/check-comments.sh
+      - name: Test
+        run: go test -race -shuffle=on -covermode=atomic -coverprofile=coverage.out ./...
+      - name: Vulnerability scan
+        run: govulncheck ./...
+
+  commits:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch base branch
+        run: git fetch origin "${{ github.base_ref }}" --depth=1
+      - name: Check commit messages
+        run: scripts/check-commits.sh "origin/${{ github.base_ref }}..HEAD"
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Cross-compile
+        run: |
+          for goos in linux darwin windows; do
+            for goarch in amd64 arm64; do
+              GOOS=$goos GOARCH=$goarch CGO_ENABLED=0 go build -trimpath ./...
+            done
+          done
