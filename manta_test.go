@@ -72,11 +72,13 @@ func TestParseFileRejectsNonReplay(t *testing.T) {
 }
 
 func TestTypesAreAliases(t *testing.T) {
-	var match stats.Match = manta.Match{}
-	var player stats.Player = manta.Player{}
-	var source stats.SourceEntry = manta.SourceEntry{}
-	_, _, _ = match, player, source
+	var match manta.Match
+	var player manta.Player
+	var source manta.SourceEntry
+	acceptStats(match, player, source)
 }
+
+func acceptStats(stats.Match, stats.Player, stats.SourceEntry) {}
 
 func ExampleParseReader() {
 	_, err := manta.ParseReader(context.Background(), strings.NewReader("not a replay"))
