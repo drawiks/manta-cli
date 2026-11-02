@@ -9,41 +9,56 @@ names, same types, same hero naming, same `player_id` (0..9) and the same
 `duration_sec`/`buff_duration`/`duration` conventions. No Docker, Java or
 `odota/parser` is required.
 
+## Install
+
+```sh
+go install github.com/drawiks/manta-cli@latest
+```
+
+Prebuilt binaries and checksums are published on the releases page. A Docker image is published as `ghcr.io/drawiks/manta-cli`.
+
 ## Usage
 
 ```
-manta_cli <match.dem|match.dem.bz2|match.dem.zst> [--stdin] [--verbose] [--dump-fields]
+manta-cli <replay> [--stdin] [--output PATH] [--verbose] [--quiet] [--compact] [--dump-fields]
+manta-cli --version
 ```
 
 - `.dem` is read directly; `.dem.bz2` is decompressed on the fly with the
   stdlib `compress/bzip2`; `.dem.zst` is supported via
   `klauspost/compress/zstd`. The format is detected from magic bytes, so a
   zstd stream named `.dem.bz2` (Valve's current naming) works too.
-- `--stdin` reads the replay from standard input and takes no file argument.
+- `--stdin` reads the replay from standard input and takes no file argument;
+  `-` is the same input.
+- `--output PATH` writes the JSON atomically instead of printing it.
 - `--verbose` prints a human-readable table to stderr after the JSON.
+- `--quiet` suppresses the verbose table and other non-error diagnostics.
+- `--compact` emits compact JSON.
 - `--dump-fields` dumps the `CDOTA_PlayerResource`, the team-data entities and
   a hero entity to stderr for re-spiking field names after a Dota patch.
+- `--version` prints the binary, commit, build date, Go and manta versions.
 
-Exit codes: `0` success, `1` parse error, `2` usage error. stdout carries only
-the JSON; diagnostics go to stderr.
+Exit codes: `0` success, `1` parse or I/O error, `2` usage error, `130`
+interrupted. stdout carries only the JSON; diagnostics go to stderr.
 
 ```sh
-manta_cli 9064911131.dem > match.json
-manta_cli 9053590215.dem --verbose
-cat 9065268582.dem | manta_cli --stdin > match.json
+manta-cli 9064911131.dem > match.json
+manta-cli 9053590215.dem --verbose
+manta-cli 9053590215.dem --output match.json
+cat 9065268582.dem | manta-cli --stdin --compact
+manta-cli --version
 ```
 
 ## Build
 
 ```sh
-go build -o manta_cli .
+make build
 ```
 
-Pure Go, statically linkable:
+The binary is pure Go and statically linkable. GoReleaser builds the six release binaries; the Docker image uses `scratch` and a non-root user.
 
 ```sh
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o manta_cli .
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o manta_cli_arm64 .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o manta-cli .
 ```
 
 ## Output schema
@@ -154,16 +169,28 @@ The parity harness is `tests/replay/parity_test.go`. It expects the external
 corpus (`MANTA_REPLAY_DIR`, default `../../../replays`) with `<id>.dem` and
 `<id>.out.json` pairs; it skips when the corpus is absent.
 
-## Tests
+## Development
 
 ```sh
-go test ./...
-MANTA_REPLAY_DIR=/path/to/replays go test ./tests/replay -run TestParityWithOdotaCLI -v
+make tools
+make hooks
+make check
 ```
 
-- `internal/stats` — extractor/aggregator/role unit tests.
-- `tests/cli` — CLI exit codes, stdin and dump modes.
+`make check` runs formatting, lint, tests, `go vet` and the comment rules. `make parity` needs the external corpus:
+
+```sh
+MANTA_REPLAY_DIR=/path/to/replays make parity
+```
+
+Hooks run `gofumpt`, the fast linter and the comment rules on commit, check the commit message, and run the full test suite on push. CI is authoritative and runs the same checks plus `govulncheck`.
+
+- `internal/aggregate`, `internal/catalog`, `internal/roles` — pure statistics and domain tests.
+- `internal/replay` — decompression, fuzz and the manta adapter.
+- `internal/cli` — flags, stdin, output and exit codes.
 - `tests/replay` — external parity harness.
+
+See `docs/architecture.md`, `docs/accuracy.md`, `docs/development.md` and `docs/schema.md`.
 
 ## License
 
