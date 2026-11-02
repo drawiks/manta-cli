@@ -1,60 +1,79 @@
 package stats
 
-// Result is the top-level JSON object emitted to stdout.
+// Result is the top-level JSON object emitted to stdout. The shape matches
+// odota-cli's Match exactly so the two tools are interchangeable.
 type Result struct {
-	MatchID     uint64   `json:"match_id,omitempty"`
-	DurationSec int32    `json:"duration_sec"`
+	MatchID     int64    `json:"match_id"`
+	DurationSec float64  `json:"duration_sec"`
 	RadiantWin  bool     `json:"radiant_win"`
 	Players     []Player `json:"players"`
 }
 
 // Player holds aggregated per-player statistics.
 type Player struct {
-	SteamID       uint64       `json:"steam_id"`
-	PlayerID      int32        `json:"player_id"`
-	HeroID        int32        `json:"hero_id"`
-	Hero          string       `json:"hero"`
-	Team          string       `json:"team"`
-	Name          string       `json:"name"`
-	Kills         int32        `json:"kills"`
-	Deaths        int32        `json:"deaths"`
-	Assists       int32        `json:"assists"`
-	Level         int32        `json:"level"`
-	LastHits      uint32       `json:"last_hits"`
-	Networth      uint32       `json:"networth"`
-	GPM           uint32       `json:"gpm"`
-	XPM           uint32       `json:"xpm"`
-	Healing       float64      `json:"healing"`
-	HeroDamage    int64        `json:"hero_damage"`
-	DamageTaken   int64        `json:"damage_taken"`
-	TowerDamage   int64        `json:"tower_damage"`
-	TimeDead      float64      `json:"time_dead"`
-	StunDuration  float64      `json:"stun_duration"`
-	StunSources   []StunSource `json:"stun_sources,omitempty"`
-	BuffSources   []BuffSource `json:"buff_sources,omitempty"`
-	BuffsDuration float64      `json:"buffs_duration"`
-	GoldWards     int64        `json:"gold_spent_wards"`
-	GoldSmoke     int64        `json:"gold_spent_smoke"`
-	GoldDust      int64        `json:"gold_spent_dust"`
-	CampsStacked  int64        `json:"camps_stacked"`
-	CreepsStacked int64        `json:"creeps_stacked"`
-	RunePickups   int32        `json:"rune_pickups"`
-	FirstBlood    bool         `json:"first_blood"`
+	SteamID          int64         `json:"steam_id"`
+	PlayerID         int           `json:"player_id"`
+	HeroID           int           `json:"hero_id"`
+	Hero             string        `json:"hero"`
+	Team             string        `json:"team"`
+	Name             string        `json:"name"`
+	Position         int           `json:"position,omitempty"`
+	Lane             string        `json:"lane,omitempty"`
+	Kills            int           `json:"kills"`
+	Deaths           int           `json:"deaths"`
+	Assists          int           `json:"assists"`
+	Level            int           `json:"level"`
+	LastHits         int           `json:"last_hits"`
+	Networth         int           `json:"networth"`
+	GPM              int           `json:"gpm"`
+	XPM              int           `json:"xpm"`
+	Healing          int           `json:"healing"`
+	HeroDamage       int           `json:"hero_damage"`
+	DamageTaken      int           `json:"damage_taken"`
+	TowerDamage      int           `json:"tower_damage"`
+	TimeDead         float64       `json:"time_dead"`
+	StunDuration     float64       `json:"stun_duration"`
+	StunSources      []SourceEntry `json:"stun_sources,omitempty"`
+	BuffDuration     float64       `json:"buff_duration"`
+	BuffSources      []SourceEntry `json:"buff_sources,omitempty"`
+	FearDuration     float64       `json:"fear_duration"`
+	FearSources      []SourceEntry `json:"fear_sources,omitempty"`
+	RootsDuration    float64       `json:"roots_duration"`
+	RootSources      []SourceEntry `json:"root_sources,omitempty"`
+	LeashDuration    float64       `json:"leash_duration"`
+	LeashSources     []SourceEntry `json:"leash_sources,omitempty"`
+	TrapDuration     float64       `json:"trap_duration"`
+	TrapSources      []SourceEntry `json:"trap_sources,omitempty"`
+	TauntDuration    float64       `json:"taunt_duration"`
+	TauntSources     []SourceEntry `json:"taunt_sources,omitempty"`
+	SilenceDuration  float64       `json:"silence_duration"`
+	SilenceSources   []SourceEntry `json:"silence_sources,omitempty"`
+	BreakDuration    float64       `json:"break_duration"`
+	BreakSources     []SourceEntry `json:"break_sources,omitempty"`
+	DisarmDuration   float64       `json:"disarm_duration"`
+	DisarmSources    []SourceEntry `json:"disarm_sources,omitempty"`
+	HealDuration     float64       `json:"heal_duration"`
+	HealValue        float64       `json:"heal_value"`
+	HealSources      []SourceEntry `json:"heal_sources,omitempty"`
+	GoldSpentWards   int           `json:"gold_spent_wards"`
+	GoldSpentSmoke   int           `json:"gold_spent_smoke"`
+	GoldSpentDust    int           `json:"gold_spent_dust"`
+	GoldLost         int           `json:"gold_lost"`
+	CampsStacked     int           `json:"camps_stacked"`
+	CreepsStacked    int           `json:"creeps_stacked"`
+	RunePickups      int           `json:"rune_pickups"`
+	WisdomsCaptured  int           `json:"wisdoms_captured"`
+	WatchersCaptured int           `json:"watchers_captured"`
+	LotusesGathered  int           `json:"lotuses_gathered"`
+	FirstBlood       bool          `json:"first_blood"`
+	CourierKills     int           `json:"courier_kills"`
 }
 
-// StunSource is one line of stun_duration attribution (modifier / scoreboard).
-type StunSource struct {
+// SourceEntry is one attribution line for a tracked effect.
+type SourceEntry struct {
 	Inflictor string  `json:"inflictor"`
 	Category  string  `json:"category"`
-	Seconds   float64 `json:"seconds"`
-}
-
-// BuffSource is one line of positive-effect attribution (buffs a player applied,
-// on allies or on itself). Value is uptime seconds for duration buffs, healed
-// HP for heal, and the application/event count is in Count.
-type BuffSource struct {
-	Inflictor string  `json:"inflictor"`
-	Category  string  `json:"category"`
-	Value     float64 `json:"value"`
-	Count     int     `json:"count"`
+	Duration  float64 `json:"duration,omitempty"`
+	Value     float64 `json:"value,omitempty"`
+	Count     int     `json:"count,omitempty"`
 }

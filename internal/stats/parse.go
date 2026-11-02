@@ -6,6 +6,7 @@ import (
 	"compress/bzip2"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,18 +23,16 @@ const (
 	heroClassPrefix      = "CDOTA_Unit_Hero_"
 	dataTeamRadiantClass = "CDOTA_DataRadiant"
 	dataTeamDireClass    = "CDOTA_DataDire"
+	rulesClass           = "CDOTAGamerulesProxy"
 
-	// indexBits is the entity index width used by manta to encode handles.
-	indexBits = uint64(14)
+	teamRadiant = 2
+	teamDire    = 3
 )
 
 var matchIDRe = regexp.MustCompile(`^(\d+)`)
 
 // decompressReader wraps r, transparently decompressing zstd and bzip2
-// streams. The format is detected from the magic bytes, not the file
-// extension: Valve serves replays as zstd while keeping the legacy .dem.bz2
-// name. The returned closer releases only the stream wrapper (a zstd decoder)
-// and is nil for plain and bzip2 streams.
+// streams. The format is detected from magic bytes, not the file extension.
 func decompressReader(r io.Reader) (io.Reader, io.Closer, error) {
 	br := bufio.NewReader(r)
 	head, err := br.Peek(4)
@@ -44,10 +43,8 @@ func decompressReader(r io.Reader) (io.Reader, io.Closer, error) {
 	var closer io.Closer
 	switch {
 	case len(head) >= 3 && bytes.Equal(head[:3], []byte("BZh")):
-		// bzip2 magic "BZh".
 		reader = bzip2.NewReader(br)
 	case len(head) >= 4 && bytes.Equal(head[:4], []byte{0x28, 0xb5, 0x2f, 0xfd}):
-		// zstd magic.
 		zr, err := zstd.NewReader(br, zstd.WithDecoderConcurrency(1))
 		if err != nil {
 			return nil, nil, err
@@ -58,8 +55,7 @@ func decompressReader(r io.Reader) (io.Reader, io.Closer, error) {
 	return reader, closer, nil
 }
 
-// openReader opens the replay file, transparently decompressing zstd and
-// bzip2 streams. Nothing is written to disk.
+// OpenReader opens path, transparently decompressing zstd/bzip2.
 func OpenReader(path string) (io.Reader, io.Closer, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -76,7 +72,6 @@ func OpenReader(path string) (io.Reader, io.Closer, error) {
 	return r, f, nil
 }
 
-// closeAll closes several closers in order, returning the first error.
 type closeAll []io.Closer
 
 func (c closeAll) Close() error {
@@ -89,7 +84,6 @@ func (c closeAll) Close() error {
 	return first
 }
 
-// zstdCloser adapts *zstd.Decoder to io.Closer: its Close returns nothing.
 type zstdCloser struct{ *zstd.Decoder }
 
 func (z zstdCloser) Close() error {
@@ -97,198 +91,74 @@ func (z zstdCloser) Close() error {
 	return nil
 }
 
-// matchIDFromFilename extracts the leading numeric id from the file name
-// (12345_...dem.bz2 -> 12345), or 0 when nothing is found.
-func matchIDFromFilename(path string) uint64 {
+func matchIDFromFilename(path string) int64 {
 	m := matchIDRe.FindStringSubmatch(filepath.Base(path))
 	if m == nil {
 		return 0
 	}
-	id, _ := strconv.ParseUint(m[1], 10, 64)
+	id, _ := strconv.ParseInt(m[1], 10, 64)
 	return id
 }
 
-// mantaPR adapts the CDOTA_PlayerResource entity to the prReader interface.
-type mantaPR struct {
-	e *manta.Entity
-}
-
-// intAny returns the first present value among the given field names. Stat
-// fields have moved between m_vecPlayerData and m_vecPlayerTeamData across
-// patches (spec §8.7); trying both keeps the reader robust. Fields may also
-// flip between int32 and uint32/uint64 encodings on the wire, so each name is
-// tried against both widths before moving on.
-func (r *mantaPR) intAny(names ...string) int32 {
-	for _, n := range names {
-		if v, ok := r.e.GetInt32(n); ok {
-			return v
-		}
-	}
-	for _, n := range names {
-		if v, ok := r.e.GetUint32(n); ok {
-			return int32(v)
-		}
-	}
-	for _, n := range names {
-		if v, ok := r.e.GetUint64(n); ok {
-			return int32(v)
-		}
-	}
-	return 0
-}
-
-func (r *mantaPR) slot(i int) (prSlot, bool) {
-	base := fmt.Sprintf("m_vecPlayerData.%04d.", i)
-	tbase := fmt.Sprintf("m_vecPlayerTeamData.%04d.", i)
-
-	var s prSlot
-	steamID, _ := r.e.GetUint64(base + "m_iPlayerSteamID")
-	team, _ := int32OrUint32(r.e, base+"m_iPlayerTeam")
-	if steamID == 0 || (team != teamRadiant && team != teamDire) {
-		return s, false
-	}
-
-	s.steamID = steamID
-	s.team = team
-	s.name, _ = r.e.GetString(base + "m_iszPlayerName")
-	s.kills = r.intAny(base+"m_iKills", tbase+"m_iKills")
-	s.deaths = r.intAny(base+"m_iDeaths", tbase+"m_iDeaths")
-	s.assists = r.intAny(base+"m_iAssists", tbase+"m_iAssists")
-	s.level = r.intAny(base+"m_iLevel", tbase+"m_iLevel")
-	s.bountyRunes = r.intAny(base+"m_iBountyRunes", tbase+"m_iBountyRunes")
-	s.powerRunes = r.intAny(base+"m_iPowerRunes", tbase+"m_iPowerRunes")
-	s.waterRunes = r.intAny(base+"m_iWaterRunes", tbase+"m_iWaterRunes")
-	s.heroID, _ = int32OrUint32(r.e, tbase+"m_nSelectedHeroID")
-	s.heroHandle, _ = r.e.GetUint64(tbase + "m_hSelectedHero")
-	s.teamSlot, _ = int32OrUint32(r.e, tbase+"m_iTeamSlot")
-	return s, true
-}
-
-// handleOf reconstructs the entity handle from index and serial, matching
-// manta's FindEntityByHandle encoding.
 func handleOf(e *manta.Entity) uint64 {
-	return uint64(uint32(e.GetSerial()))<<indexBits | uint64(uint32(e.GetIndex())&((1<<indexBits)-1))
+	return uint64(uint32(e.GetSerial()))<<14 | uint64(uint32(e.GetIndex())&((1<<14)-1))
 }
 
-// mantaTeams adapts the CDOTA_DataRadiant/CDOTA_DataDire entities to the
-// teamReader interface. The camps/creeps stacked counters live under
-// m_vecDataTeam.<teamSlot>, each player reading their own row. The
-// per-player scoreboard numbers (total earned gold/xp, tower damage, healing,
-// net worth, last hits, stuns, wards placed, smokes used) sit in the same
-// sub-struct and are the values Valve's match API and OpenDota report, so when
-// present they become the authoritative source for GPM/XPM, tower damage and
-// the consumable-gold counts. Hero damage is the exception (the scoreboard
-// m_flHeroDamage diverges from OpenDota), so it stays on the combat log.
-type mantaTeams struct {
-	radiant *manta.Entity
-	dire    *manta.Entity
+type slotInfo struct {
+	slot       int
+	prIndex    int
+	team       string
+	teamSlot   int
+	steamID    int64
+	name       string
+	heroID     int
+	heroHandle uint64
+	hero       string
 }
 
-func (t *mantaTeams) team(side string, teamSlot int32) (teamData, bool) {
-	var e *manta.Entity
-	switch side {
-	case "radiant":
-		e = t.radiant
-	case "dire":
-		e = t.dire
-	}
-	if e == nil {
-		return teamData{}, false
-	}
-	base := fmt.Sprintf("m_vecDataTeam.%04d.", teamSlot)
-	camps, ok := int32OrUint32(e, base+"m_iCampsStacked")
-	if !ok {
-		return teamData{}, false
-	}
-	creeps, _ := int32OrUint32(e, base+"m_iCreepsStacked")
-	td := teamData{campsStacked: int64(camps), creepsStacked: int64(creeps)}
-
-	// Scoreboard section. m_iTotalEarnedGold and m_flTowerDamage gate the
-	// section: when either is absent the patch has no scoreboard numbers, so
-	// score stays false and callers keep the combat-log aggregates. The other
-	// fields each carry a -1 sentinel: a field missing on the patch keeps the
-	// combat-log value instead of overwriting it with a bogus zero.
-	td.totalEarnedGold = -1
-	td.totalEarnedXP = -1
-	td.towerDamage = -1
-	td.healing = -1
-	td.netWorth = -1
-	td.lastHitCount = -1
-	td.stuns = -1
-	td.runePickups = -1
-
-	gold, ok := int32OrUint32(e, base+"m_iTotalEarnedGold")
-	if !ok {
-		return td, true
-	}
-	td.totalEarnedGold = int64(gold)
-	if tower, ok := e.GetFloat32(base + "m_flTowerDamage"); ok {
-		td.towerDamage = float64(tower)
-	} else {
-		return td, true
-	}
-	if xp, ok := int32OrUint32(e, base+"m_iTotalEarnedXP"); ok {
-		td.totalEarnedXP = int64(xp)
-	}
-	if healing, ok := e.GetFloat32(base + "m_fHealing"); ok {
-		td.healing = float64(healing)
-	}
-	if netWorth, ok := int32OrUint32(e, base+"m_iNetWorth"); ok {
-		td.netWorth = int64(netWorth)
-	}
-	if lh, ok := int32OrUint32(e, base+"m_iLastHitCount"); ok {
-		td.lastHitCount = int64(lh)
-	}
-	if stuns, ok := e.GetFloat32(base + "m_fStuns"); ok {
-		td.stuns = float64(stuns)
-	}
-	if runes, ok := int32OrUint32(e, base+"m_iRunePickups"); ok {
-		td.runePickups = int64(runes)
-	}
-
-	// Ward/smoke counts are the per-player scoreboard numbers used for
-	// gold_spent_wards/smoke; -1 marks a patch without the fields. Observer
-	// ward placements are free, so only the sentry placement count is read.
-	td.sentryWardsPlaced = -1
-	td.smokesUsed = -1
-	if w, ok := int32OrUint32(e, base+"m_iSentryWardsPlaced"); ok {
-		td.sentryWardsPlaced = int64(w)
-	}
-	if s, ok := int32OrUint32(e, base+"m_iSmokesUsed"); ok {
-		td.smokesUsed = int64(s)
-	}
-
-	td.score = true
-	return td, true
+type pendingCombat struct {
+	rawTime int
+	ev      combatEvent
 }
 
-func playerIDOf(e *manta.Entity) int32 {
-	if id, ok := e.GetInt32("m_iPlayerID"); ok {
-		return id
-	}
-	// The field is serialized as uint32 on newer patches (spec §8.7);
-	// GetInt32 would silently return 0 and collapse the pid/xpID binding.
-	if id, ok := e.GetUint32("m_iPlayerID"); ok {
-		return int32(id)
-	}
-	return 0
+type chatEvent struct {
+	kind    string
+	player1 int
+	rawTime int
 }
 
-// int32OrUint32 reads an int32 field, falling back to the uint32 wire
-// encoding used on newer patches (the same flip as m_iPlayerID, spec §8.7).
-func int32OrUint32(e *manta.Entity, name string) (int32, bool) {
-	if v, ok := e.GetInt32(name); ok {
-		return v, true
-	}
-	if v, ok := e.GetUint32(name); ok {
-		return int32(v), true
-	}
-	return 0, false
+type replayState struct {
+	p  *manta.Parser
+	ag *aggregator
+
+	pr    *manta.Entity
+	rules *manta.Entity
+	teams map[string]*manta.Entity
+
+	slots      [10]slotInfo
+	handleSlot map[uint64]int
+	init       bool
+
+	startKnown bool
+	gameStart  int
+	postGame   bool
+	serverTick uint32
+
+	pending          []pendingCombat
+	pendingChat      []chatEvent
+	pendingIntervals []intervalData
+
+	lastEmitted int
+	hasEmitted  bool
+
+	startingItemsWritten [10]bool
+	abilityNames         map[uint64]string
+
+	lastCombatTime int
+	lastTBKillTeam int
+	matchID        int64
 }
 
-// parseReplay parses a single replay file and returns the aggregated result.
-// When no match id can be derived from the filename it falls back to the
-// replay's own CDemoFileInfo metadata.
 func ParseReplay(path string) (*Result, error) {
 	r, closer, err := OpenReader(path)
 	if err != nil {
@@ -297,9 +167,6 @@ func ParseReplay(path string) (*Result, error) {
 	return parseStream(r, closer, matchIDFromFilename(path))
 }
 
-// parseStdin parses a replay stream read from r. The format is detected from
-// the magic bytes; the match id can only come from the replay's CDemoFileInfo
-// metadata.
 func ParseStdin(r io.Reader) (*Result, error) {
 	reader, closer, err := decompressReader(r)
 	if err != nil {
@@ -308,8 +175,7 @@ func ParseStdin(r io.Reader) (*Result, error) {
 	return parseStream(reader, closer, 0)
 }
 
-// parseStream parses a replay stream and returns the aggregated result.
-func parseStream(r io.Reader, closer io.Closer, matchID uint64) (*Result, error) {
+func parseStream(r io.Reader, closer io.Closer, fallbackMatchID int64) (*Result, error) {
 	if closer != nil {
 		defer closer.Close()
 	}
@@ -319,57 +185,82 @@ func parseStream(r io.Reader, closer io.Closer, matchID uint64) (*Result, error)
 		return nil, err
 	}
 
-	aggr := newAggregator()
-	aggr.lookup = p.LookupStringByIndex
-	var pr *manta.Entity
-	teams := &mantaTeams{}
-	heroes := make(map[uint64]heroInfo)
+	st := &replayState{
+		p:            p,
+		ag:           newAggregator(),
+		teams:        map[string]*manta.Entity{},
+		handleSlot:   map[uint64]int{},
+		abilityNames: map[uint64]string{},
+		matchID:      fallbackMatchID,
+	}
 
 	p.OnEntity(func(e *manta.Entity, op manta.EntityOp) error {
+		if !op.Flag(manta.EntityOpEntered) {
+			return nil
+		}
+		cn := e.GetClassName()
 		switch {
-		case e.GetClassName() == prClass:
-			if op.Flag(manta.EntityOpEntered) {
-				pr = e
-			}
-		case e.GetClassName() == dataTeamRadiantClass:
-			if op.Flag(manta.EntityOpEntered) {
-				teams.radiant = e
-			}
-		case e.GetClassName() == dataTeamDireClass:
-			if op.Flag(manta.EntityOpEntered) {
-				teams.dire = e
-			}
-		case strings.HasPrefix(e.GetClassName(), heroClassPrefix):
-			// Track the scheduled respawn clock on every update (death is a
-			// delta, not a create); the hero identity is bound once on enter.
-			// m_lifeState is never transmitted on modern patches; the hero
-			// entity reports m_flRespawnTime = death time + respawn duration
-			// on death instead, which pairs with the combat-log DEATH clocks
-			// to compute time_dead (spec §6.5).
-			if respawn, ok := e.GetFloat32("m_flRespawnTime"); ok {
-				aggr.respawnUpdate(handleOf(e), respawn)
-			}
-			if op.Flag(manta.EntityOpEntered) {
-				heroes[handleOf(e)] = heroInfo{
-					name:     strings.TrimPrefix(e.GetClassName(), heroClassPrefix),
-					playerID: playerIDOf(e),
-				}
+		case cn == prClass:
+			st.pr = e
+		case cn == rulesClass:
+			st.rules = e
+		case cn == dataTeamRadiantClass:
+			st.teams["radiant"] = e
+		case cn == dataTeamDireClass:
+			st.teams["dire"] = e
+		case strings.HasPrefix(cn, heroClassPrefix):
+			if st.resolveDue() {
+				st.assignHero(handleOf(e), unitToHeroName(cn))
 			}
 		}
+		st.resolveSlots()
 		return nil
 	})
 
-	p.Callbacks.OnCMsgDOTACombatLogEntry(func(e *dota.CMsgDOTACombatLogEntry) error {
-		aggr.handleCombatLog(e, p.Tick)
+	p.Callbacks.OnCNETMsg_Tick(func(m *dota.CNETMsg_Tick) error {
+		st.serverTick = m.GetTick()
+		st.maybeSample()
 		return nil
 	})
 
 	p.Callbacks.OnCDemoFileInfo(func(info *dota.CDemoFileInfo) error {
-		if matchID == 0 {
-			if d := info.GetGameInfo().GetDota(); d != nil {
-				matchID = d.GetMatchId()
-			}
+		d := info.GetGameInfo().GetDota()
+		if d == nil {
+			return nil
 		}
+		if d.GetMatchId() != 0 {
+			st.matchID = int64(d.GetMatchId())
+		}
+		players := make([]playerInfo, 0, len(d.GetPlayerInfo()))
+		for i, pi := range d.GetPlayerInfo() {
+			team := "radiant"
+			if pi.GetGameTeam() == teamDire {
+				team = "dire"
+			}
+			players = append(players, playerInfo{
+				Slot:    i,
+				SteamID: int64(pi.GetSteamid()),
+				Hero:    pi.GetHeroName(),
+				Name:    pi.GetPlayerName(),
+				Team:    team,
+			})
+		}
+		st.ag.setEpilogue(
+			st.matchID,
+			shortestFloat32(float64(info.GetPlaybackTime())),
+			d.GetGameWinner() == 2,
+			players,
+		)
+		return nil
+	})
+
+	p.Callbacks.OnCMsgDOTACombatLogEntry(func(e *dota.CMsgDOTACombatLogEntry) error {
+		st.handleCombat(e)
+		return nil
+	})
+
+	p.Callbacks.OnCDOTAUserMsg_ChatEvent(func(e *dota.CDOTAUserMsg_ChatEvent) error {
+		st.handleChat(e)
 		return nil
 	})
 
@@ -377,9 +268,531 @@ func parseStream(r io.Reader, closer io.Closer, matchID uint64) (*Result, error)
 		return nil, err
 	}
 
-	if pr == nil {
+	if st.pr == nil {
 		return nil, fmt.Errorf("CDOTA_PlayerResource not found")
 	}
+	if !st.startKnown {
+		st.startKnown = true
+		st.gameStart = 0
+		st.flushIntervals()
+		st.flushPending()
+	}
+	st.resolveSlots()
+	if st.init {
+		st.maybeSample()
+	}
+	st.finishRoster()
+	return st.ag.result(), nil
+}
 
-	return buildResult(aggr, &mantaPR{e: pr}, heroes, teams, matchID), nil
+func (st *replayState) resolveDue() bool { return !st.init }
+
+func (st *replayState) resolveSlots() {
+	if st.init || st.pr == nil {
+		return
+	}
+	added := 0
+	for i := 0; i < 30 && added < 10; i++ {
+		team, ok := numInt(st.pr, fmt.Sprintf("m_vecPlayerData.%04d.m_iPlayerTeam", i))
+		if !ok {
+			continue
+		}
+		if team == 14 {
+			return
+		}
+		if team != teamRadiant && team != teamDire {
+			continue
+		}
+		teamSlot, _ := numInt(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_iTeamSlot", i))
+		steamID, _ := numUint64(st.pr, fmt.Sprintf("m_vecPlayerData.%04d.m_iPlayerSteamID", i))
+		name, _ := st.pr.GetString(fmt.Sprintf("m_vecPlayerData.%04d.m_iszPlayerName", i))
+		heroID, _ := numInt(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_nSelectedHeroID", i))
+		handle, _ := numUint64(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_hSelectedHero", i))
+		teamName := "radiant"
+		if team == teamDire {
+			teamName = "dire"
+		}
+		st.slots[added] = slotInfo{
+			slot:       added,
+			prIndex:    i,
+			team:       teamName,
+			teamSlot:   teamSlot,
+			steamID:    int64(steamID),
+			name:       name,
+			heroID:     heroID,
+			heroHandle: handle,
+		}
+		hero := st.heroName(handle)
+		st.slots[added].hero = hero
+		if handle != 0 && handle != 0xFFFFFF {
+			st.handleSlot[handle] = added
+			st.assignHero(handle, hero)
+		}
+		st.ag.setSlot(added, teamName, hero)
+		added++
+	}
+	if added == 10 {
+		st.init = true
+	}
+}
+
+func (st *replayState) heroName(handle uint64) string {
+	if handle == 0 || handle == 0xFFFFFF {
+		return ""
+	}
+	if e := st.p.FindEntityByHandle(handle); e != nil {
+		return unitToHeroName(e.GetClassName())
+	}
+	return ""
+}
+
+func (st *replayState) assignHero(handle uint64, hero string) {
+	if hero == "" {
+		return
+	}
+	slot, ok := st.handleSlot[handle]
+	if !ok {
+		return
+	}
+	st.ag.setSlot(slot, st.slots[slot].team, hero)
+}
+
+func (st *replayState) handleCombat(e *dota.CMsgDOTACombatLogEntry) {
+	rawTime := int(math.Round(float64(e.GetTimestamp())))
+	st.lastCombatTime = rawTime
+	if e.GetType() == dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_GAME_STATE {
+		switch e.GetValue() {
+		case 5:
+			if !st.startKnown {
+				st.gameStart = rawTime
+				st.startKnown = true
+				st.flushIntervals()
+				st.flushPending()
+			}
+		case 6:
+			st.maybeSample()
+			st.postGame = true
+		}
+		return
+	}
+	if e.GetType() == dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_TEAM_BUILDING_KILL {
+		st.lastTBKillTeam = int(e.GetTargetTeam())
+	}
+	ev := st.combatEvent(e)
+	if !st.startKnown {
+		st.pending = append(st.pending, pendingCombat{rawTime: rawTime, ev: ev})
+		return
+	}
+	ev.Time = rawTime - st.gameStart
+	st.dispatchCombat(ev)
+}
+
+func (st *replayState) combatEvent(e *dota.CMsgDOTACombatLogEntry) combatEvent {
+	return combatEvent{
+		Type:             e.GetType().String(),
+		AttackerName:     st.combatName(e.GetAttackerName()),
+		TargetName:       st.combatName(e.GetTargetName()),
+		SourceName:       st.combatName(e.GetDamageSourceName()),
+		TargetSourceName: st.combatName(e.GetTargetSourceName()),
+		Inflictor:        st.combatName(e.GetInflictorName()),
+		ValueName:        st.purchaseName(e),
+		AttackerHero:     e.GetIsAttackerHero(),
+		TargetHero:       e.GetIsTargetHero(),
+		AttackerIllusion: e.GetIsAttackerIllusion(),
+		TargetIllusion:   e.GetIsTargetIllusion(),
+		Value:            int(int32(e.GetValue())),
+		StunDuration:     float64(e.GetStunDuration()),
+		GoldReason:       int(e.GetGoldReason()),
+	}
+}
+
+func (st *replayState) combatName(idx uint32) string {
+	if idx == 0 {
+		return "dota_unknown"
+	}
+	if s, ok := st.p.LookupStringByIndex("CombatLogNames", int32(idx)); ok && s != "" {
+		return s
+	}
+	return "dota_unknown"
+}
+
+func (st *replayState) purchaseName(e *dota.CMsgDOTACombatLogEntry) string {
+	if e.GetType() != dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_PURCHASE {
+		return ""
+	}
+	if s, ok := st.p.LookupStringByIndex("CombatLogNames", int32(e.GetValue())); ok {
+		return s
+	}
+	return ""
+}
+
+func (st *replayState) dispatchCombat(ev combatEvent) {
+	switch ev.Type {
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_DAMAGE.String():
+		st.ag.onDamage(ev)
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_HEAL.String():
+		st.ag.onHeal(ev)
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_ADD.String():
+		st.ag.onModifier(ev, true)
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MODIFIER_REMOVE.String():
+		st.ag.onModifier(ev, false)
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_PURCHASE.String():
+		st.ag.onPurchase(ev)
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_GOLD.String():
+		st.ag.onGold(ev)
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_DEATH.String():
+		st.ag.onDeath(ev)
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_ABILITY.String():
+		st.ag.onAbility(ev)
+	}
+}
+
+func (st *replayState) handleChat(e *dota.CDOTAUserMsg_ChatEvent) {
+	kind := e.GetType().String()
+	if kind != "CHAT_MESSAGE_FIRSTBLOOD" && kind != "CHAT_MESSAGE_MINIBOSS_KILL" {
+		return
+	}
+	ce := chatEvent{
+		kind:    kind,
+		player1: int(e.GetPlayerid_1()),
+		rawTime: int(math.Round(float64(e.GetTime()))),
+	}
+	if !st.startKnown {
+		st.pendingChat = append(st.pendingChat, ce)
+		return
+	}
+	st.dispatchChat(ce)
+}
+
+func (st *replayState) dispatchChat(ce chatEvent) {
+	switch ce.kind {
+	case "CHAT_MESSAGE_FIRSTBLOOD":
+		st.ag.onFirstBlood(ce.player1)
+	case "CHAT_MESSAGE_MINIBOSS_KILL":
+		t := ce.rawTime - st.gameStart
+		if t <= 0 {
+			t = st.currentTime() - st.gameStart
+		}
+		st.ag.onMiniboss(ce.player1, t)
+	}
+}
+
+func (st *replayState) flushPending() {
+	if !st.startKnown {
+		return
+	}
+	for _, p := range st.pending {
+		ev := p.ev
+		ev.Time = p.rawTime - st.gameStart
+		st.dispatchCombat(ev)
+	}
+	st.pending = nil
+	for _, ce := range st.pendingChat {
+		st.dispatchChat(ce)
+	}
+	st.pendingChat = nil
+}
+
+func (st *replayState) currentTime() int {
+	if st.rules != nil {
+		if v, ok := numFloat(st.rules, "m_pGameRules.m_fGameTime"); ok {
+			return int(math.Round(v))
+		}
+		tick := int(st.serverTick)
+		if paused, ok := st.rules.GetBool("m_pGameRules.m_bGamePaused"); ok && paused {
+			if v, ok := numInt(st.rules, "m_pGameRules.m_nPauseStartTick"); ok {
+				tick = v
+			}
+		}
+		pausedTicks, _ := numInt(st.rules, "m_pGameRules.m_nTotalPausedTicks")
+		return int(math.Round(float64(tick-pausedTicks) / 30.0))
+	}
+	return st.lastCombatTime
+}
+
+func (st *replayState) maybeSample() {
+	if st.postGame || !st.init {
+		return
+	}
+	if !st.startKnown && st.rules != nil {
+		if v, ok := numFloat(st.rules, "m_pGameRules.m_flGameStartTime"); ok && v != 0 {
+			st.gameStart = int(math.Round(v))
+			st.startKnown = true
+			st.flushIntervals()
+		}
+	}
+	raw := st.currentTime()
+	if st.hasEmitted && raw <= st.lastEmitted {
+		return
+	}
+	st.lastEmitted = raw
+	st.hasEmitted = true
+	st.snapshotInterval(raw)
+}
+
+func (st *replayState) snapshotInterval(raw int) {
+	ivs := make([]intervalData, 0, 10)
+	for slot := 0; slot < 10; slot++ {
+		si := st.slots[slot]
+		if h, ok := numUint64(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_hSelectedHero", si.prIndex)); ok && h != 0 && h != 0xFFFFFF {
+			si.heroHandle = h
+			st.slots[slot].heroHandle = h
+			st.handleSlot[h] = slot
+		}
+		if id, ok := numInt(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_nSelectedHeroID", si.prIndex)); ok {
+			si.heroID = id
+			st.slots[slot].heroID = id
+		}
+		hero := st.p.FindEntityByHandle(si.heroHandle)
+		var iv intervalData
+		iv.Slot = slot
+		iv.Time = raw
+		iv.HeroID = si.heroID
+		if hero != nil {
+			iv.Unit = unitToHeroName(hero.GetClassName())
+			if v, ok := numInt(hero, "m_lifeState"); ok {
+				iv.LifeState = v
+				iv.HasLifeState = true
+			}
+			if cx, ok := numInt(hero, "CBodyComponent.m_cellX"); ok {
+				vx, _ := numFloat(hero, "CBodyComponent.m_vecX")
+				cy, okY := numInt(hero, "CBodyComponent.m_cellY")
+				vy, _ := numFloat(hero, "CBodyComponent.m_vecY")
+				if okY {
+					iv.X = float64(cx)*128.0 + vx
+					iv.Y = float64(cy)*128.0 + vy
+					iv.HasPos = true
+				}
+			}
+		}
+		if si.heroHandle != 0 && si.heroHandle != 0xFFFFFF {
+			if unit := st.heroName(si.heroHandle); unit != "" {
+				st.slots[slot].hero = unit
+				st.ag.setSlot(slot, si.team, unit)
+			}
+		}
+		iv.Kills, _ = numInt(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_iKills", si.prIndex))
+		iv.Deaths, _ = numInt(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_iDeaths", si.prIndex))
+		iv.Assists, _ = numInt(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_iAssists", si.prIndex))
+		iv.Level, _ = numInt(st.pr, fmt.Sprintf("m_vecPlayerTeamData.%04d.m_iLevel", si.prIndex))
+
+		td := st.teams[si.team]
+		if td != nil && si.teamSlot >= 0 {
+			base := fmt.Sprintf("m_vecDataTeam.%04d.", si.teamSlot)
+			iv.Gold, _ = numInt(td, base+"m_iTotalEarnedGold")
+			iv.XP, _ = numInt(td, base+"m_iTotalEarnedXP")
+			iv.LastHits, _ = numInt(td, base+"m_iLastHitCount")
+			iv.Networth, _ = numInt(td, base+"m_iNetWorth")
+			iv.CampsStacked, _ = numInt(td, base+"m_iCampsStacked")
+			iv.CreepsStacked, _ = numInt(td, base+"m_iCreepsStacked")
+			iv.RunePickups, _ = numInt(td, base+"m_iRunePickups")
+			iv.WisdomsCaptured, _ = numInt(td, base+"m_iWisdomShrinesTaken")
+			iv.WatchersCaptured, _ = numInt(td, base+"m_iWatchersTaken")
+			iv.LotusesGathered, _ = numInt(td, base+"m_iLotusesTaken")
+			iv.SentryWards, _ = numInt(td, base+"m_iSentryWardsPlaced")
+			if v, ok := numFloat(td, base+"m_fStuns"); ok {
+				iv.Stuns = v
+			}
+		}
+		ivs = append(ivs, iv)
+	}
+	st.scanStartingItems(raw)
+	if !st.startKnown {
+		st.pendingIntervals = append(st.pendingIntervals, ivs...)
+		return
+	}
+	for _, iv := range ivs {
+		iv.Time -= st.gameStart
+		st.ag.onInterval(iv)
+	}
+	st.emitAbilityLevels(raw - st.gameStart)
+}
+
+func (st *replayState) flushIntervals() {
+	for _, iv := range st.pendingIntervals {
+		iv.Time -= st.gameStart
+		st.ag.onInterval(iv)
+	}
+	st.pendingIntervals = nil
+}
+
+func (st *replayState) scanStartingItems(t int) {
+	for slot := 0; slot < 10; slot++ {
+		if st.startingItemsWritten[slot] {
+			continue
+		}
+		si := st.slots[slot]
+		hero := st.p.FindEntityByHandle(si.heroHandle)
+		if hero == nil {
+			continue
+		}
+		found := false
+		heroName := unitToHeroName(hero.GetClassName())
+		for i := 0; i < 9; i++ {
+			h, ok := numUint64(hero, fmt.Sprintf("m_hItems.%04d", i))
+			if !ok || h == 0 || h == 0xFFFFFF {
+				continue
+			}
+			found = true
+			item := st.entityName(h)
+			if _, ok := ItemWardCosts[item]; ok {
+				st.ag.onPurchase(combatEvent{Time: t, ValueName: item, TargetName: heroName})
+			}
+		}
+		if found {
+			st.startingItemsWritten[slot] = true
+		}
+	}
+}
+
+func (st *replayState) emitAbilityLevels(t int) {
+	for slot := 0; slot < 10; slot++ {
+		si := st.slots[slot]
+		hero := st.p.FindEntityByHandle(si.heroHandle)
+		if hero == nil {
+			continue
+		}
+		heroName := unitToHeroName(hero.GetClassName())
+		for i := 0; i < 32; i++ {
+			h, ok := numUint64(hero, fmt.Sprintf("m_vecAbilities.%04d", i))
+			if !ok || h == 0 || h == 0xFFFFFF {
+				h, ok = numUint64(hero, fmt.Sprintf("m_hAbilities.%04d", i))
+				if !ok || h == 0 || h == 0xFFFFFF {
+					continue
+				}
+			}
+			name, ok := st.abilityNames[h]
+			if !ok {
+				name = st.entityName(h)
+				st.abilityNames[h] = name
+			}
+			if !PurgeTalents[name] {
+				continue
+			}
+			ae := st.p.FindEntityByHandle(h)
+			if ae == nil {
+				continue
+			}
+			lvl, _ := numInt(ae, "m_iLevel")
+			st.ag.onAbilityLevel(heroName, name, lvl, t)
+		}
+	}
+}
+
+func (st *replayState) entityName(handle uint64) string {
+	e := st.p.FindEntityByHandle(handle)
+	if e == nil {
+		return ""
+	}
+	idx, ok := numInt(e, "m_pEntity.m_nameStringTableIndex")
+	if !ok {
+		idx, _ = numInt(e, "m_pEntity.m_nameStringableIndex")
+	}
+	if name, ok := st.p.LookupStringByIndex("EntityNames", int32(idx)); ok {
+		return name
+	}
+	return ""
+}
+
+func (st *replayState) finishRoster() {
+	if !st.startKnown {
+		st.gameStart = 0
+		st.startKnown = true
+		st.flushIntervals()
+		st.flushPending()
+	}
+	if len(st.ag.roster) == 0 {
+		players := make([]playerInfo, 0, 10)
+		for slot := 0; slot < 10; slot++ {
+			si := st.slots[slot]
+			hero := st.slots[slot].hero
+			if hero == "" {
+				hero = st.heroName(si.heroHandle)
+			}
+			players = append(players, playerInfo{
+				Slot:    slot,
+				SteamID: si.steamID,
+				Hero:    hero,
+				Name:    si.name,
+				Team:    si.team,
+			})
+		}
+		dur := float64(st.lastCombatTime - st.gameStart)
+		if dur < 0 {
+			dur = 0
+		}
+		st.ag.setEpilogue(st.matchID, shortestFloat32(dur), st.lastTBKillTeam == teamDire, players)
+	}
+}
+
+func playerIDOf(e *manta.Entity) int32 {
+	if e == nil {
+		return 0
+	}
+	if v, ok := e.GetInt32("m_iPlayerID"); ok {
+		return v
+	}
+	if v, ok := e.GetUint32("m_iPlayerID"); ok {
+		return int32(v)
+	}
+	return 0
+}
+
+func int32OrUint32(e *manta.Entity, name string) (int32, bool) {
+	if e == nil {
+		return 0, false
+	}
+	if v, ok := e.GetInt32(name); ok {
+		return v, true
+	}
+	if v, ok := e.GetUint32(name); ok {
+		return int32(v), true
+	}
+	return 0, false
+}
+
+func numInt(e *manta.Entity, name string) (int, bool) {
+	if e == nil {
+		return 0, false
+	}
+	switch v := e.Get(name).(type) {
+	case int32:
+		return int(v), true
+	case uint32:
+		return int(v), true
+	case uint64:
+		return int(v), true
+	case int64:
+		return int(v), true
+	}
+	return 0, false
+}
+
+func numFloat(e *manta.Entity, name string) (float64, bool) {
+	if e == nil {
+		return 0, false
+	}
+	switch v := e.Get(name).(type) {
+	case float32:
+		return float64(v), true
+	case float64:
+		return v, true
+	}
+	return 0, false
+}
+
+func numUint64(e *manta.Entity, name string) (uint64, bool) {
+	if e == nil {
+		return 0, false
+	}
+	if v, ok := e.GetUint64(name); ok {
+		return v, true
+	}
+	if v, ok := e.GetUint32(name); ok {
+		return uint64(v), true
+	}
+	if v, ok := e.GetInt32(name); ok {
+		return uint64(uint32(v)), true
+	}
+	return 0, false
 }

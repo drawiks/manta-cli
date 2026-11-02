@@ -97,7 +97,7 @@ func TestPrintTable(t *testing.T) {
 				GPM: 512, XPM: 640, Healing: 5200, HeroDamage: 18750,
 				DamageTaken: 12400, TimeDead: 240.5, TowerDamage: 1800,
 				StunDuration: 14.3, FirstBlood: true, RunePickups: 2,
-				GoldWards: 900, GoldSmoke: 200, GoldDust: 80},
+				GoldSpentWards: 900, GoldSpentSmoke: 200, GoldSpentDust: 80},
 		},
 	}
 	var buf bytes.Buffer
