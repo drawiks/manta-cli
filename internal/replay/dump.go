@@ -9,10 +9,7 @@ import (
 	"github.com/dotabuff/manta"
 )
 
-// DumpEntityFields parses the replay and prints every field of the
-// CDOTA_PlayerResource entity and of the CDOTA_DataRadiant/CDOTA_DataDire
-// team-data entities to w (spike, spec §8.7). Output goes to stderr so stdout
-// stays reserved for JSON.
+// The dump goes to stderr so stdout remains the JSON contract.
 func DumpEntityFields(path string, w io.Writer) int {
 	r, closer, err := OpenReader(path)
 	if err != nil {
@@ -22,7 +19,6 @@ func DumpEntityFields(path string, w io.Writer) int {
 	return dumpStream(r, closer, w)
 }
 
-// DumpStdin parses a replay stream read from r and dumps the entity fields to w.
 func DumpStdin(r io.Reader, w io.Writer) int {
 	reader, closer, err := decompressReader(r)
 	if err != nil {

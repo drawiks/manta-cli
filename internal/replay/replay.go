@@ -35,8 +35,6 @@ const (
 
 var matchIDRe = regexp.MustCompile(`^(\d+)`)
 
-// decompressReader wraps r, transparently decompressing zstd and bzip2
-// streams. The format is detected from magic bytes, not the file extension.
 func decompressReader(r io.Reader) (io.Reader, io.Closer, error) {
 	br := bufio.NewReader(r)
 	head, err := br.Peek(4)
@@ -59,7 +57,6 @@ func decompressReader(r io.Reader) (io.Reader, io.Closer, error) {
 	return reader, closer, nil
 }
 
-// OpenReader opens path, transparently decompressing zstd/bzip2.
 func OpenReader(path string) (io.Reader, io.Closer, error) {
 	f, err := os.Open(path)
 	if err != nil {

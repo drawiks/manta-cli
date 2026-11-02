@@ -5,8 +5,6 @@ import (
 	"strings"
 )
 
-// HeroMap maps a replay unit name to the Valve hero id. The table is game
-// data, kept in sync with the canonical npc_dota_hero_* names.
 var HeroMap = map[string]int{
 	"npc_dota_hero_antimage":            1,
 	"npc_dota_hero_axe":                 2,
@@ -147,8 +145,6 @@ var heroIDByKey = func() map[string]int {
 	return m
 }()
 
-// BuffCategories maps a cleaned modifier name to the positive-effect category
-// reported in buff_sources.
 var BuffCategories = map[string]string{
 	"dazzle_shallow_grave":                   "save",
 	"oracle_false_promise":                   "save",
@@ -228,7 +224,6 @@ var TalentGlobalAbilities = map[string]string{
 	"chen_hand_of_god": "special_bonus_unique_chen_12",
 }
 
-// PurgeTalents is the set of talent names tracked for purge gating.
 var PurgeTalents = map[string]bool{
 	"special_bonus_unique_keeper_of_the_light_14":                      true,
 	"special_bonus_unique_chen_12":                                     true,
@@ -464,7 +459,6 @@ func classifyDisarm(inf string) bool {
 		strings.Contains(l, "fates_edict")
 }
 
-// trackedBuff reports whether a buff category is reported in buff_sources.
 var TrackedBuff = map[string]bool{
 	"save":           true,
 	"purge":          true,
