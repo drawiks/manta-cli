@@ -44,3 +44,6 @@ match.json
 manta.txt
 AGENTS.md
 matches/
+
+# Benchmark harness cache
+bench/__pycache__/

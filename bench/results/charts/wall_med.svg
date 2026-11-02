@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="520" font-family="sans-serif">
+<text x="70" y="28" font-size="20" font-weight="bold">Wall time</text>
+<text x="18" y="225.0" transform="rotate(-90 18 225.0)" font-size="12">seconds</text>
+<line x1="70" y1="400.0" x2="1070" y2="400.0" stroke="#ddd"/>
+<text x="62" y="404.0" text-anchor="end" font-size="11">0.0</text>
+<line x1="70" y1="330.0" x2="1070" y2="330.0" stroke="#ddd"/>
+<text x="62" y="334.0" text-anchor="end" font-size="11">1.9</text>
+<line x1="70" y1="260.0" x2="1070" y2="260.0" stroke="#ddd"/>
+<text x="62" y="264.0" text-anchor="end" font-size="11">3.8</text>
+<line x1="70" y1="190.0" x2="1070" y2="190.0" stroke="#ddd"/>
+<text x="62" y="194.0" text-anchor="end" font-size="11">5.7</text>
+<line x1="70" y1="120.0" x2="1070" y2="120.0" stroke="#ddd"/>
+<text x="62" y="124.0" text-anchor="end" font-size="11">7.6</text>
+<line x1="70" y1="50.0" x2="1070" y2="50.0" stroke="#ddd"/>
+<text x="62" y="54.0" text-anchor="end" font-size="11">9.4</text>
+<rect x="90.0" y="328.6" width="28.8" height="71.4" fill="#2e7d32"/>
+<text x="104.4" y="324.6" text-anchor="middle" font-size="9">1.9</text>
+<rect x="122.0" y="327.4" width="28.8" height="72.6" fill="#81c784"/>
+<text x="136.4" y="323.4" text-anchor="middle" font-size="9">2.0</text>
+<rect x="154.0" y="400.0" width="28.8" height="0.0" fill="#1565c0"/>
+<text x="168.4" y="396.0" text-anchor="middle" font-size="9">0.0</text>
+<rect x="186.0" y="269.6" width="28.8" height="130.4" fill="#ef6c00"/>
+<text x="200.4" y="265.6" text-anchor="middle" font-size="9">3.5</text>
+<rect x="218.0" y="271.7" width="28.8" height="128.3" fill="#c62828"/>
+<text x="232.4" y="267.7" text-anchor="middle" font-size="9">3.5</text>
+<text x="170.0" y="418" text-anchor="middle" font-size="11">9064911131</text>
+<rect x="290.0" y="318.1" width="28.8" height="81.9" fill="#2e7d32"/>
+<text x="304.4" y="314.1" text-anchor="middle" font-size="9">2.2</text>
+<rect x="322.0" y="314.7" width="28.8" height="85.3" fill="#81c784"/>
+<text x="336.4" y="310.7" text-anchor="middle" font-size="9">2.3</text>
+<rect x="354.0" y="400.0" width="28.8" height="0.0" fill="#1565c0"/>
+<text x="368.4" y="396.0" text-anchor="middle" font-size="9">0.0</text>
+<rect x="386.0" y="229.4" width="28.8" height="170.6" fill="#ef6c00"/>
+<text x="400.4" y="225.4" text-anchor="middle" font-size="9">4.6</text>
+<rect x="418.0" y="232.8" width="28.8" height="167.2" fill="#c62828"/>
+<text x="432.4" y="228.8" text-anchor="middle" font-size="9">4.5</text>
+<text x="370.0" y="418" text-anchor="middle" font-size="11">9064082159</text>
+<rect x="490.0" y="259.3" width="28.8" height="140.7" fill="#2e7d32"/>
+<text x="504.4" y="255.3" text-anchor="middle" font-size="9">3.8</text>
+<rect x="522.0" y="251.0" width="28.8" height="149.0" fill="#81c784"/>
+<text x="536.4" y="247.0" text-anchor="middle" font-size="9">4.0</text>
+<rect x="554.0" y="400.0" width="28.8" height="0.0" fill="#1565c0"/>
+<text x="568.4" y="396.0" text-anchor="middle" font-size="9">0.0</text>
+<rect x="586.0" y="95.7" width="28.8" height="304.3" fill="#ef6c00"/>
+<text x="600.4" y="91.7" text-anchor="middle" font-size="9">8.2</text>
+<rect x="618.0" y="113.8" width="28.8" height="286.2" fill="#c62828"/>
+<text x="632.4" y="109.8" text-anchor="middle" font-size="9">7.7</text>
+<text x="570.0" y="418" text-anchor="middle" font-size="11">9048749977</text>
+<rect x="690.0" y="293.1" width="28.8" height="106.9" fill="#2e7d32"/>
+<text x="704.4" y="289.1" text-anchor="middle" font-size="9">2.9</text>
+<rect x="722.0" y="400.0" width="28.8" height="0.0" fill="#81c784"/>
+<text x="736.4" y="396.0" text-anchor="middle" font-size="9">0.0</text>
+<rect x="754.0" y="400.0" width="28.8" height="0.0" fill="#1565c0"/>
+<text x="768.4" y="396.0" text-anchor="middle" font-size="9">0.0</text>
+<rect x="786.0" y="179.4" width="28.8" height="220.6" fill="#ef6c00"/>
+<text x="800.4" y="175.4" text-anchor="middle" font-size="9">5.9</text>
+<rect x="818.0" y="182.6" width="28.8" height="217.4" fill="#c62828"/>
+<text x="832.4" y="178.6" text-anchor="middle" font-size="9">5.9</text>
+<text x="770.0" y="418" text-anchor="middle" font-size="11">9053590215</text>
+<rect x="890.0" y="308.2" width="28.8" height="91.8" fill="#2e7d32"/>
+<text x="904.4" y="304.2" text-anchor="middle" font-size="9">2.5</text>
+<rect x="922.0" y="400.0" width="28.8" height="0.0" fill="#81c784"/>
+<text x="936.4" y="396.0" text-anchor="middle" font-size="9">0.0</text>
+<rect x="954.0" y="400.0" width="28.8" height="0.0" fill="#1565c0"/>
+<text x="968.4" y="396.0" text-anchor="middle" font-size="9">0.0</text>
+<rect x="986.0" y="198.6" width="28.8" height="201.4" fill="#ef6c00"/>
+<text x="1000.4" y="194.6" text-anchor="middle" font-size="9">5.4</text>
+<rect x="1018.0" y="196.9" width="28.8" height="203.1" fill="#c62828"/>
+<text x="1032.4" y="192.9" text-anchor="middle" font-size="9">5.5</text>
+<text x="970.0" y="418" text-anchor="middle" font-size="11">9065268582</text>
+<rect x="70" y="470" width="12" height="12" fill="#2e7d32"/>
+<text x="88" y="481" font-size="12">manta_dem</text>
+<rect x="171" y="470" width="12" height="12" fill="#81c784"/>
+<text x="189" y="481" font-size="12">manta_bz2</text>
+<rect x="272" y="470" width="12" height="12" fill="#1565c0"/>
+<text x="290" y="481" font-size="12">manta_offline</text>
+<rect x="401" y="470" width="12" height="12" fill="#ef6c00"/>
+<text x="419" y="481" font-size="12">parser_only</text>
+<rect x="516" y="470" width="12" height="12" fill="#c62828"/>
+<text x="534" y="481" font-size="12">odota_e2e</text>
+</svg>
