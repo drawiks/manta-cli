@@ -506,7 +506,7 @@ def main() -> int:
         rid, dem, _ = REPLAYS[0]
         for i in range(1, 3):
             for mode in ["parser_only", "odota_e2e"]:
-                r = measure(rid, dem, None, nd[rid], mode, i, port=PORT_CONSTRAINED)
+                r = measure(rid, dem, None, nd[rid], mode, i, port=PORT_CONSTRAINED, server_name=CONTAINER_CONSTRAINED)
                 r.mode += "_constrained"
                 constrained.append(r)
                 print(f"  constrained {mode} run {i}: {r.wall_s:.2f}s", flush=True)
