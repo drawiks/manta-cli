@@ -3,7 +3,6 @@ package replay_test
 import (
 	"context"
 	"encoding/json"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,7 +82,7 @@ func TestParityWithOdotaCLI(t *testing.T) {
 				t.Errorf("%s: missing field %s", id, k)
 				continue
 			}
-			if !closeEnough(k, want, have) {
+			if want != have {
 				t.Errorf("%s: %s = %v, want %v", id, k, have, want)
 			}
 		}
@@ -130,26 +129,6 @@ func itoa(i int) string {
 		i /= 10
 	}
 	return string(b[p:])
-}
-
-// closeEnough encodes the known sampling residuals of the manta decoder:
-// the final interval can be one tick behind clarity (networth), and death
-// transitions are quantized to whole seconds (time_dead).
-func closeEnough(key string, want, have any) bool {
-	wf, wok := want.(float64)
-	hf, hok := have.(float64)
-	if !wok || !hok {
-		return want == have
-	}
-	switch {
-	case strings.HasSuffix(key, ".time_dead"):
-		return math.Abs(wf-hf) <= 2
-	case strings.HasSuffix(key, ".networth"):
-		return math.Abs(wf-hf) <= 1
-	case strings.HasSuffix(key, ".gpm"):
-		return math.Abs(wf-hf) <= 1
-	}
-	return wf == hf
 }
 
 func TestJSONRoundtrip(t *testing.T) {
