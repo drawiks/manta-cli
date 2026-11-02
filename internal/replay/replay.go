@@ -183,7 +183,22 @@ func parseStream(ctx context.Context, r io.Reader, closer io.Closer, fallbackMat
 		defer func() { _ = closer.Close() }()
 	}
 
-	p, err := manta.NewStreamParser(r)
+	br, ok := r.(*bufio.Reader)
+	if !ok {
+		br = bufio.NewReader(r)
+	}
+	head, err := br.Peek(len(replayMagic))
+	if err != nil {
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return ErrNotReplay
+		}
+		return err
+	}
+	if !bytes.Equal(head, replayMagic) {
+		return ErrNotReplay
+	}
+
+	p, err := manta.NewStreamParser(br)
 	if err != nil {
 		return err
 	}
@@ -301,7 +316,7 @@ func parseStream(ctx context.Context, r io.Reader, closer io.Closer, fallbackMat
 	}
 
 	if st.pr == nil {
-		return fmt.Errorf("CDOTA_PlayerResource not found")
+		return ErrNoPlayerResource
 	}
 	if !st.startKnown {
 		st.startKnown = true
