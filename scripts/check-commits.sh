@@ -6,7 +6,11 @@ range="${1:-HEAD~1..HEAD}"
 tmp=$(mktemp)
 trap 'rm -f "$tmp"' EXIT
 
-for commit in $(git rev-list "$range"); do
+for commit in $(git rev-list --no-merges "$range"); do
+  author=$(git show -s --format='%an <%ae>' "$commit")
+  case "$author" in
+    *dependabot*|*"[bot]"*) continue ;;
+  esac
   git show -s --format=%B "$commit" > "$tmp"
   scripts/check-commit-msg.sh "$tmp" || {
     echo "  commit: $commit" >&2
