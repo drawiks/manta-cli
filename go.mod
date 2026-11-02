@@ -3,7 +3,7 @@ module manta-cli
 go 1.24
 
 require (
-	github.com/dotabuff/manta v1.5.0
+	github.com/dotabuff/manta v1.5.2
 	github.com/klauspost/compress v1.19.1
 )
 
