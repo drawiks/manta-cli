@@ -85,3 +85,24 @@ func TestAggregateCombatAndIntervals(t *testing.T) {
 		t.Errorf("lich = healing %d buffs %v", lich.Healing, lich.BuffDuration)
 	}
 }
+
+func BenchmarkAggregate(b *testing.B) {
+	a := New()
+	a.Epilogue(events.Epilogue{
+		MatchID:     1,
+		DurationSec: 2400,
+		Players: []events.PlayerInfo{
+			{Slot: 0, Hero: "npc_dota_hero_dazzle", Team: "radiant"},
+			{Slot: 1, Hero: "npc_dota_hero_axe", Team: "dire"},
+		},
+	})
+	a.Slot(events.Slot{Slot: 0, Team: "radiant", Hero: "npc_dota_hero_dazzle"})
+	a.Slot(events.Slot{Slot: 1, Team: "dire", Hero: "npc_dota_hero_axe"})
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		a.Interval(events.Interval{Slot: 0, Time: i, HasLifeState: true, Gold: i, XP: i, Networth: i})
+		a.Combat(events.Combat{Time: i, Type: events.CombatModifierAdd, AttackerName: "npc_dota_hero_dazzle", TargetName: "npc_dota_hero_axe", Inflictor: "modifier_naga_siren_ensnare", AttackerHero: true, TargetHero: true})
+		a.Combat(events.Combat{Time: i + 1, Type: events.CombatModifierRemove, AttackerName: "npc_dota_hero_dazzle", TargetName: "npc_dota_hero_axe", Inflictor: "modifier_naga_siren_ensnare", AttackerHero: true, TargetHero: true})
+	}
+}
