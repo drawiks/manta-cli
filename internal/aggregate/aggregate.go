@@ -8,8 +8,8 @@ import (
 
 	"github.com/drawiks/manta-cli/internal/catalog"
 	"github.com/drawiks/manta-cli/internal/events"
-	"github.com/drawiks/manta-cli/internal/model"
 	"github.com/drawiks/manta-cli/internal/roles"
+	"github.com/drawiks/manta-cli/stats"
 )
 
 type srcKey struct {
@@ -52,7 +52,7 @@ type talentKey struct {
 }
 
 type Aggregator struct {
-	m *model.Result
+	m *stats.Match
 
 	roster   []events.PlayerInfo
 	slotHero map[int]string
@@ -96,7 +96,7 @@ type Aggregator struct {
 
 func New() *Aggregator {
 	a := &Aggregator{
-		m:                     &model.Result{},
+		m:                     &stats.Match{},
 		slotHero:              map[int]string{},
 		slotTeam:              map[int]string{},
 		heroTeam:              map[string]string{},
@@ -511,7 +511,7 @@ func (a *Aggregator) AbilityLevel(e events.AbilityLevel) {
 	a.onAbilityLevel(e.Hero, e.Ability, e.Level, e.Time)
 }
 
-func (a *Aggregator) Result() *model.Result {
+func (a *Aggregator) Result() *stats.Match {
 	players := append([]events.PlayerInfo(nil), a.roster...)
 	if len(players) == 0 {
 		for slot, hero := range a.slotHero {
@@ -528,7 +528,7 @@ func (a *Aggregator) Result() *model.Result {
 	}
 	sort.Slice(players, func(i, j int) bool { return players[i].Slot < players[j].Slot })
 
-	a.m.Players = make([]model.Player, len(players))
+	a.m.Players = make([]stats.Player, len(players))
 	heroKeys := make([]string, len(players))
 	for i := range players {
 		p := &players[i]
@@ -574,14 +574,14 @@ func (a *Aggregator) Result() *model.Result {
 		mp.TimeDead = math.Round(a.deadSecondsBySlot[p.Slot])
 	}
 
-	byHero := make(map[string][]*model.Player, len(a.m.Players))
+	byHero := make(map[string][]*stats.Player, len(a.m.Players))
 	for i := range a.m.Players {
 		byHero[heroKeys[i]] = append(byHero[heroKeys[i]], &a.m.Players[i])
 	}
 
 	for k, v := range a.stunSources {
 		for _, mp := range byHero[k.Attacker] {
-			mp.StunSources = append(mp.StunSources, model.SourceEntry{
+			mp.StunSources = append(mp.StunSources, stats.SourceEntry{
 				Inflictor: k.Inflictor,
 				Category:  "stun",
 				Duration:  v,
@@ -590,7 +590,7 @@ func (a *Aggregator) Result() *model.Result {
 	}
 	for k, v := range a.buffSources {
 		for _, mp := range byHero[k.Attacker] {
-			mp.BuffSources = append(mp.BuffSources, model.SourceEntry{
+			mp.BuffSources = append(mp.BuffSources, stats.SourceEntry{
 				Inflictor: k.Inflictor,
 				Category:  k.Category,
 				Duration:  math.Round(v),
@@ -600,7 +600,7 @@ func (a *Aggregator) Result() *model.Result {
 	}
 	for k, n := range a.purgeCounts {
 		for _, mp := range byHero[k.Attacker] {
-			mp.BuffSources = append(mp.BuffSources, model.SourceEntry{
+			mp.BuffSources = append(mp.BuffSources, stats.SourceEntry{
 				Inflictor: k.Inflictor,
 				Category:  "purge",
 				Count:     n,
@@ -611,22 +611,22 @@ func (a *Aggregator) Result() *model.Result {
 	specs := []struct {
 		kind     catalog.ModKind
 		category string
-		entries  func(*model.Player) *[]model.SourceEntry
-		total    func(*model.Player) *float64
+		entries  func(*stats.Player) *[]stats.SourceEntry
+		total    func(*stats.Player) *float64
 	}{
-		{catalog.KindBreak, "break", func(p *model.Player) *[]model.SourceEntry { return &p.BreakSources }, func(p *model.Player) *float64 { return &p.BreakDuration }},
-		{catalog.KindFear, "fear", func(p *model.Player) *[]model.SourceEntry { return &p.FearSources }, func(p *model.Player) *float64 { return &p.FearDuration }},
-		{catalog.KindRoot, "root", func(p *model.Player) *[]model.SourceEntry { return &p.RootSources }, func(p *model.Player) *float64 { return &p.RootsDuration }},
-		{catalog.KindLeash, "leash", func(p *model.Player) *[]model.SourceEntry { return &p.LeashSources }, func(p *model.Player) *float64 { return &p.LeashDuration }},
-		{catalog.KindTrap, "trap", func(p *model.Player) *[]model.SourceEntry { return &p.TrapSources }, func(p *model.Player) *float64 { return &p.TrapDuration }},
-		{catalog.KindTaunt, "taunt", func(p *model.Player) *[]model.SourceEntry { return &p.TauntSources }, func(p *model.Player) *float64 { return &p.TauntDuration }},
-		{catalog.KindSilence, "silence", func(p *model.Player) *[]model.SourceEntry { return &p.SilenceSources }, func(p *model.Player) *float64 { return &p.SilenceDuration }},
-		{catalog.KindDisarm, "disarm", func(p *model.Player) *[]model.SourceEntry { return &p.DisarmSources }, func(p *model.Player) *float64 { return &p.DisarmDuration }},
+		{catalog.KindBreak, "break", func(p *stats.Player) *[]stats.SourceEntry { return &p.BreakSources }, func(p *stats.Player) *float64 { return &p.BreakDuration }},
+		{catalog.KindFear, "fear", func(p *stats.Player) *[]stats.SourceEntry { return &p.FearSources }, func(p *stats.Player) *float64 { return &p.FearDuration }},
+		{catalog.KindRoot, "root", func(p *stats.Player) *[]stats.SourceEntry { return &p.RootSources }, func(p *stats.Player) *float64 { return &p.RootsDuration }},
+		{catalog.KindLeash, "leash", func(p *stats.Player) *[]stats.SourceEntry { return &p.LeashSources }, func(p *stats.Player) *float64 { return &p.LeashDuration }},
+		{catalog.KindTrap, "trap", func(p *stats.Player) *[]stats.SourceEntry { return &p.TrapSources }, func(p *stats.Player) *float64 { return &p.TrapDuration }},
+		{catalog.KindTaunt, "taunt", func(p *stats.Player) *[]stats.SourceEntry { return &p.TauntSources }, func(p *stats.Player) *float64 { return &p.TauntDuration }},
+		{catalog.KindSilence, "silence", func(p *stats.Player) *[]stats.SourceEntry { return &p.SilenceSources }, func(p *stats.Player) *float64 { return &p.SilenceDuration }},
+		{catalog.KindDisarm, "disarm", func(p *stats.Player) *[]stats.SourceEntry { return &p.DisarmSources }, func(p *stats.Player) *float64 { return &p.DisarmDuration }},
 	}
 	for _, s := range specs {
 		for k, v := range a.durations[s.kind] {
 			for _, mp := range byHero[k.Attacker] {
-				*s.entries(mp) = append(*s.entries(mp), model.SourceEntry{
+				*s.entries(mp) = append(*s.entries(mp), stats.SourceEntry{
 					Inflictor: k.Inflictor,
 					Category:  s.category,
 					Duration:  math.Round(v),
@@ -637,7 +637,7 @@ func (a *Aggregator) Result() *model.Result {
 	}
 	for k, agg := range a.healSources {
 		for _, mp := range byHero[k.Attacker] {
-			entry := model.SourceEntry{Inflictor: k.Inflictor, Category: "heal"}
+			entry := stats.SourceEntry{Inflictor: k.Inflictor, Category: "heal"}
 			if agg.Duration > 0 {
 				entry.Duration = math.Round(agg.Duration)
 				mp.HealDuration += agg.Duration
@@ -683,7 +683,7 @@ func (a *Aggregator) Result() *model.Result {
 	return a.m
 }
 
-func sortSources(s []model.SourceEntry) {
+func sortSources(s []stats.SourceEntry) {
 	sort.Slice(s, func(i, j int) bool {
 		if s[i].Duration != s[j].Duration {
 			return s[i].Duration > s[j].Duration
@@ -695,7 +695,7 @@ func sortSources(s []model.SourceEntry) {
 	})
 }
 
-func sortHealSources(s []model.SourceEntry) {
+func sortHealSources(s []stats.SourceEntry) {
 	sort.Slice(s, func(i, j int) bool {
 		if s[i].Duration != s[j].Duration {
 			return s[i].Duration > s[j].Duration

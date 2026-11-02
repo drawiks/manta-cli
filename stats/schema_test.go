@@ -1,4 +1,4 @@
-package model
+package stats
 
 import (
 	"encoding/json"
@@ -17,7 +17,7 @@ type schemaFile struct {
 }
 
 func TestSchemaFileMatchesStructs(t *testing.T) {
-	raw, err := os.ReadFile("../../schema/match.schema.json")
+	raw, err := os.ReadFile("../schema/match.schema.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +25,7 @@ func TestSchemaFileMatchesStructs(t *testing.T) {
 	if err := json.Unmarshal(raw, &s); err != nil {
 		t.Fatal(err)
 	}
-	check(t, reflect.TypeOf(Result{}), s.Properties)
+	check(t, reflect.TypeOf(Match{}), s.Properties)
 	check(t, reflect.TypeOf(Player{}), s.Defs["player"].Properties)
 	check(t, reflect.TypeOf(SourceEntry{}), s.Defs["source"].Properties)
 }

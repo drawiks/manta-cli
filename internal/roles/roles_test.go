@@ -3,7 +3,7 @@ package roles
 import (
 	"testing"
 
-	"github.com/drawiks/manta-cli/internal/model"
+	"github.com/drawiks/manta-cli/stats"
 )
 
 func TestClassifyZoneAndLane(t *testing.T) {
@@ -31,7 +31,7 @@ func TestClassifyZoneAndLane(t *testing.T) {
 }
 
 func TestAssignRoles(t *testing.T) {
-	players := []model.Player{
+	players := []stats.Player{
 		{PlayerID: 0, Team: "radiant"},
 		{PlayerID: 1, Team: "radiant"},
 		{PlayerID: 2, Team: "radiant"},
@@ -70,7 +70,7 @@ func TestAssignRoles(t *testing.T) {
 }
 
 func TestAssignRolesNoSamples(t *testing.T) {
-	p := model.Player{PlayerID: 0, Team: "radiant"}
+	p := stats.Player{PlayerID: 0, Team: "radiant"}
 	AssignRoles([]Input{{P: &p}})
 	if p.Position != 0 || p.Lane != "" {
 		t.Errorf("no samples should leave role empty, got pos=%d lane=%q", p.Position, p.Lane)

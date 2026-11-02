@@ -1,4 +1,4 @@
-package model
+package stats
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 )
 
 func TestSchemaMatchesOdotaCLI(t *testing.T) {
-	res := Result{
+	res := Match{
 		MatchID:     1,
 		DurationSec: 2.5,
 		Players: []Player{{

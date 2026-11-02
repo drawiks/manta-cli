@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/drawiks/manta-cli/internal/app"
-	"github.com/drawiks/manta-cli/internal/model"
 	"github.com/drawiks/manta-cli/internal/replay"
 	"github.com/drawiks/manta-cli/internal/version"
+	"github.com/drawiks/manta-cli/stats"
 )
 
 const UsageLine = "usage: manta-cli <replay> [--stdin] [--output PATH] [--verbose] [--quiet] [--compact] [--dump-fields] [--version]"
@@ -89,7 +89,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return replay.DumpEntityFields(o.paths[0], stderr)
 	}
 
-	var res *model.Result
+	var res *stats.Match
 	var err error
 	if o.stdin {
 		res, err = app.ParseStream(ctx, stdin)
@@ -107,7 +107,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	return emit(res, o, stdout, stderr)
 }
 
-func emit(res *model.Result, o options, stdout, stderr io.Writer) int {
+func emit(res *stats.Match, o options, stdout, stderr io.Writer) int {
 	var out []byte
 	var err error
 	if o.compact {
@@ -176,7 +176,7 @@ func printUsage(w io.Writer) {
 	_, _ = fmt.Fprintln(w, "  manta-cli match.dem --output match.json")
 }
 
-func PrintTable(w io.Writer, res *model.Result) {
+func PrintTable(w io.Writer, res *stats.Match) {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
 	_, _ = fmt.Fprintf(tw, "match_id=%d duration=%.0fs radiant_win=%v\n",
 		res.MatchID, res.DurationSec, res.RadiantWin)

@@ -3,7 +3,7 @@ package roles
 import (
 	"sort"
 
-	"github.com/drawiks/manta-cli/internal/model"
+	"github.com/drawiks/manta-cli/stats"
 )
 
 // Lane and position detection uses the first WindowSec seconds of hero
@@ -119,7 +119,7 @@ type Farm struct {
 }
 
 type Input struct {
-	P           *model.Player
+	P           *stats.Player
 	Stats       *Samples
 	Farm        Farm
 	supportLike bool
@@ -177,7 +177,7 @@ func assignTeam(in []Input) {
 
 	ranked := append([]Input(nil), in...)
 	byCore(ranked)
-	coreLike := make(map[*model.Player]bool, len(in))
+	coreLike := make(map[*stats.Player]bool, len(in))
 	for i, r := range ranked {
 		coreLike[r.P] = i < 3
 	}
