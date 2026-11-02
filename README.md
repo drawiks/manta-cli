@@ -12,7 +12,7 @@ names, same types, same hero naming, same `player_id` (0..9) and the same
 ## Install
 
 ```sh
-go install github.com/drawiks/manta-cli@latest
+go install github.com/drawiks/manta-cli/cmd/manta-cli@latest
 ```
 
 Prebuilt binaries and checksums are published on the releases page. A Docker image is published as `ghcr.io/drawiks/manta-cli`.
@@ -58,7 +58,7 @@ make build
 The binary is pure Go and statically linkable. GoReleaser builds the six release binaries; the Docker image uses `scratch` and a non-root user.
 
 ```sh
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o manta-cli .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o manta-cli ./cmd/manta-cli
 ```
 
 ## Output schema

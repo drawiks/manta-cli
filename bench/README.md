@@ -104,7 +104,7 @@
 
 ```bash
 # бинарники
-go build -trimpath -ldflags="-s -w" -o /tmp/bench/manta_cli .
+go build -trimpath -ldflags="-s -w" -o /tmp/bench/manta_cli ./cmd/manta-cli
 (cd ~/odota-cli && GOTOOLCHAIN=auto go build -trimpath -ldflags="-s -w" -o /tmp/bench/odota_cli .)
 
 # парсер

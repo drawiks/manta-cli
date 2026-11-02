@@ -8,7 +8,7 @@ before:
 
 builds:
   - id: manta-cli
-    main: .
+    main: ./cmd/manta-cli
     binary: manta-cli
     env:
       - CGO_ENABLED=0
