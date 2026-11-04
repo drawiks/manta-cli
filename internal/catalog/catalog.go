@@ -147,19 +147,15 @@ var heroIDByKey = func() map[string]int {
 
 var BuffCategories = map[string]string{
 	"dazzle_shallow_grave":                   "save",
-	"oracle_false_promise":                   "save",
+	"oracle_false_promise_timer":             "save",
 	"omniknight_guardian_angel":              "save",
-	"abaddon_borrowed_time":                  "save",
 	"obsidian_destroyer_astral_imprisonment": "save",
-	"pugna_decrepify":                        "save",
-	"underlord_dark_rift":                    "save",
 	"ringmaster_strongman_tonic":             "save",
 	"tusk_snowball":                          "save",
 	"ringmaster_the_box_buff":                "save",
-	"eul_cyclone":                            "save",
+	"wind_waker":                             "save",
 	"item_force_staff":                       "save",
 	"item_hurricane_pike":                    "save",
-	"disperser_movespeed_buff":               "save",
 
 	"abaddon_aphotic_shield": "shield",
 	"item_pavise":            "shield",
@@ -200,6 +196,7 @@ var PurgeModifiers = map[string]bool{
 	"item_lotus_orb_active":             true,
 	"alchemist_berserk_potion":          true,
 	"shadow_demon_purge_slow":           true,
+	"disperser_movespeed_buff":          true,
 }
 
 // ShardPurgeModifiers only dispel after the caster bought Aghanim's Shard.
@@ -278,7 +275,7 @@ type ModClass struct {
 
 var suffixStrips = []string{
 	"_healing_aura", "_healing", "_aura", "_debuff",
-	"_leash", "_spear", "_fade", "_buff",
+	"_leash", "_spear", "_fade", "_buff", "_timer",
 	"_armor", "_active",
 }
 

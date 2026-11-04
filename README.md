@@ -6,8 +6,9 @@ per-player statistics as one JSON object to stdout.
 
 The output is a drop-in match for `odota-cli`'s `Match` JSON: same field
 names, same types, same hero naming, same `player_id` (0..9) and the same
-`duration_sec`/`buff_duration`/`duration` conventions. No Docker, Java or
-`odota/parser` is required.
+`duration_sec`/`buff_duration`/`duration` conventions. Save and purge
+classification includes documented corrections; see `docs/accuracy.md`. No
+Docker, Java or `odota/parser` is required.
 
 ## Install
 
@@ -191,7 +192,7 @@ scoreboard `m_fStuns` total.
 
 ## Validation
 
-Parity was checked against `odota-cli` v0.2.1 on five modern replays. Every field matches exactly; the harness fails on a single difference.
+Parity was checked against `odota-cli` v0.2.1 on five modern replays. Every field matched exactly for v0.5.0. The later save/purge correction intentionally differs for Oracle False Promise and Wind Waker; `docs/accuracy.md` lists the known differences.
 
 The parity harness is `tests/replay/parity_test.go`. It expects the external
 corpus (`MANTA_REPLAY_DIR`, default `../../../replays`) with `<id>.dem` and

@@ -20,7 +20,7 @@ make comments
 make check
 ```
 
-`make bench` runs the aggregation benchmarks. The pre-push hook uses `-short`, so it never parses the large corpus. `make parity` is the explicit full run and needs `MANTA_REPLAY_DIR` pointing at a directory with `<id>.dem` and `<id>.out.json` pairs.
+`make bench` runs the aggregation benchmarks. The pre-push hook uses `-short`, so it never parses the large corpus. `make parity` is the explicit full run and needs `MANTA_REPLAY_DIR` pointing at a directory with `<id>.dem` and `<id>.out.json` pairs. It currently reports the intentional Oracle False Promise and Wind Waker save differences listed in `docs/accuracy.md`.
 
 The public API lives in the module root and `stats`; implementation packages stay under `internal/`. Before changing an exported name or field, check `go doc github.com/drawiks/manta-cli` and `go doc github.com/drawiks/manta-cli/stats`. After `v0.5.0`, add a pinned `gorelease` compatibility check as `make api-check`; do not add it to `make check`.
 

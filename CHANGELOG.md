@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
+## Unreleased
+
+### Fixed
+
+- Oracle False Promise is counted as a save through `modifier_oracle_false_promise_timer`.
+- Wind Waker is counted as a save.
+- Eul's Cyclone, Pugna Decrepify, Underlord Dark Rift and Abaddon Borrowed Time are no longer save buffs.
+- Disperser's movespeed buff is counted as a purge application instead of a save.
+
+### Notes
+
+- These corrections intentionally differ from `odota-cli` for the affected modifiers. See `docs/accuracy.md`.
+
 ## 0.5.0 - 2026-11-02
 
 ### Added

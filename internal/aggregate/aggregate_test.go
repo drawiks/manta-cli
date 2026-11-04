@@ -86,6 +86,72 @@ func TestAggregateCombatAndIntervals(t *testing.T) {
 	}
 }
 
+func TestSaveAndPurgeClassification(t *testing.T) {
+	a := New()
+	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{
+		{Slot: 0, Hero: "npc_dota_hero_oracle", Team: "dire"},
+		{Slot: 1, Hero: "npc_dota_hero_lion", Team: "dire"},
+		{Slot: 2, Hero: "npc_dota_hero_axe", Team: "radiant"},
+	}})
+	for slot, team := range []string{"dire", "dire", "radiant"} {
+		a.Slot(events.Slot{Slot: slot, Team: team, Hero: a.roster[slot].Hero})
+	}
+
+	modifier := func(add bool, at int, inflictor string) {
+		t.Helper()
+		kind := events.CombatModifierRemove
+		if add {
+			kind = events.CombatModifierAdd
+		}
+		a.Combat(events.Combat{
+			Time:         at,
+			Type:         kind,
+			AttackerName: "npc_dota_hero_oracle",
+			TargetName:   "npc_dota_hero_lion",
+			Inflictor:    inflictor,
+			AttackerHero: true,
+			TargetHero:   true,
+		})
+	}
+
+	modifier(true, 100, "modifier_oracle_false_promise_timer")
+	modifier(false, 107, "modifier_oracle_false_promise_timer")
+	modifier(true, 110, "modifier_wind_waker")
+	modifier(false, 115, "modifier_wind_waker")
+	modifier(true, 120, "modifier_disperser_movespeed_buff")
+	modifier(true, 130, "modifier_eul_cyclone")
+	modifier(false, 135, "modifier_eul_cyclone")
+	modifier(true, 140, "modifier_pugna_decrepify")
+	modifier(false, 145, "modifier_pugna_decrepify")
+	modifier(true, 150, "modifier_underlord_dark_rift")
+	modifier(false, 155, "modifier_underlord_dark_rift")
+	modifier(true, 160, "modifier_abaddon_borrowed_time")
+	modifier(false, 165, "modifier_abaddon_borrowed_time")
+
+	res := a.Result()
+	oracle := res.Players[0]
+	if oracle.BuffDuration != 12 {
+		t.Errorf("oracle buff_duration = %v, want 12", oracle.BuffDuration)
+	}
+
+	saves := map[string]float64{}
+	purges := map[string]int{}
+	for _, s := range oracle.BuffSources {
+		switch s.Category {
+		case "save":
+			saves[s.Inflictor] = s.Duration
+		case "purge":
+			purges[s.Inflictor] += s.Count
+		}
+	}
+	if len(saves) != 2 || saves["oracle_false_promise"] != 7 || saves["wind_waker"] != 5 {
+		t.Errorf("oracle save sources = %+v", oracle.BuffSources)
+	}
+	if purges["disperser_movespeed"] != 1 {
+		t.Errorf("oracle purge sources = %+v", oracle.BuffSources)
+	}
+}
+
 func BenchmarkAggregate(b *testing.B) {
 	a := New()
 	a.Epilogue(events.Epilogue{
