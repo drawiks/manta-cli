@@ -157,36 +157,40 @@ var BuffCategories = map[string]string{
 	"undying_tombstone_bunker_friendly":      "save",
 	"item_force_staff":                       "save",
 	"item_hurricane_pike":                    "save",
+	"shadow_demon_disruption":                "save",
+	"item_sphere_target":                     "save",
 
-	"abaddon_aphotic_shield": "shield",
-	"item_pavise":            "shield",
-	"lich_frost_shield":      "shield",
-	"marci_bodyguard":        "shield",
-	"item_pipe_of_insight":   "shield",
-	"ogre_magi_smash_buff":   "shield",
+	"abaddon_aphotic_shield":   "shield",
+	"item_pavise_shield":       "shield",
+	"lich_frost_shield":        "shield",
+	"item_pipe_barrier":        "shield",
+	"ogre_magi_smash_buff":     "shield",
+	"item_crimson_guard_extra": "shield",
 
-	"omniknight_repel": "spell_immunity",
+	"omniknight_martyr": "spell_immunity",
 
 	"item_glimmer_cape_fade":  "invisibility",
 	"item_shadow_amulet_fade": "invisibility",
 	"mirana_moonlight_shadow": "invisibility",
-	"bounty_hunter_wind_walk": "invisibility",
 
 	"ogre_magi_bloodlust":                      "buff_stats",
 	"treant_living_armor":                      "buff_stats",
-	"marci_companion_run_ally_movespeed":       "buff_stats",
 	"marci_bodyguarded":                        "buff_stats",
 	"io_overcharge":                            "buff_stats",
 	"dark_seer_ion_shell":                      "buff_stats",
-	"chen_divine_favor_armor":                  "buff_stats",
+	"chen_divine_favor_armor_buff":             "buff_stats",
 	"empower":                                  "buff_stats",
-	"item_solar_crest_armor_addition":          "buff_stats",
 	"item_medallion_of_courage_armor_addition": "buff_stats",
 	"alchemist_berserk_potion":                 "buff_stats",
+	"sven_warcry":                              "buff_stats",
+	"troll_warlord_battle_trance_aura":         "buff_stats",
+	"item_boots_of_bearing_active":             "buff_stats",
 
-	"item_drum":        "buff_haste",
-	"centaur_stampede": "buff_haste",
-	"dark_seer_surge":  "buff_haste",
+	"item_ancient_janggo_active":         "buff_haste",
+	"centaur_stampede":                   "buff_haste",
+	"dark_seer_surge":                    "buff_haste",
+	"marci_companion_run_ally_movespeed": "buff_haste",
+	"grimstroke_spirit_walk_buff":        "buff_haste",
 }
 
 // PurgeModifiers always dispel allies and are counted per application.
@@ -465,7 +469,6 @@ var TrackedBuff = map[string]bool{
 	"invisibility":   true,
 	"buff_stats":     true,
 	"buff_haste":     true,
-	"mana_restore":   true,
 }
 
 func HeroKey(s string) string {

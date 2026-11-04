@@ -494,6 +494,8 @@ func combatType(t dota.DOTA_COMBATLOG_TYPES) (events.CombatType, bool) {
 		return events.CombatDeath, true
 	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_ABILITY:
 		return events.CombatAbility, true
+	case dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MANA_RESTORED:
+		return events.CombatManaRestore, true
 	}
 	return 0, false
 }

@@ -60,6 +60,7 @@ const (
 	CombatGold
 	CombatDeath
 	CombatAbility
+	CombatManaRestore
 )
 
 type Combat struct {

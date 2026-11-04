@@ -33,7 +33,7 @@
       "required": [
         "steam_id", "player_id", "hero_id", "hero", "team", "name",
         "kills", "deaths", "assists", "level", "last_hits", "networth",
-        "gpm", "xpm", "healing", "hero_damage", "damage_taken",
+        "gpm", "xpm", "healing", "mana_restored", "hero_damage", "damage_taken",
         "tower_damage", "time_dead", "stun_duration", "buff_duration",
         "fear_duration", "roots_duration", "leash_duration", "trap_duration",
         "taunt_duration", "silence_duration", "break_duration",
@@ -61,6 +61,7 @@
         "gpm": { "type": "integer" },
         "xpm": { "type": "integer" },
         "healing": { "type": "integer" },
+        "mana_restored": { "type": "integer" },
         "hero_damage": { "type": "integer" },
         "damage_taken": { "type": "integer" },
         "tower_damage": { "type": "integer" },

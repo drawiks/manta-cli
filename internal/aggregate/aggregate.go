@@ -70,6 +70,7 @@ type Aggregator struct {
 	roleFarm    map[int]roles.Farm
 
 	healingByAttacker     map[string]int
+	manaRestored          map[string]int
 	heroDamageByAttacker  map[string]int
 	damageTakenByTarget   map[string]int
 	towerDamageByAttacker map[string]int
@@ -107,6 +108,7 @@ func New() *Aggregator {
 		roleSamples:           map[int]*roles.Samples{},
 		roleFarm:              map[int]roles.Farm{},
 		healingByAttacker:     map[string]int{},
+		manaRestored:          map[string]int{},
 		heroDamageByAttacker:  map[string]int{},
 		damageTakenByTarget:   map[string]int{},
 		towerDamageByAttacker: map[string]int{},
@@ -428,6 +430,19 @@ func (a *Aggregator) onDeath(ev events.Combat) {
 	}
 }
 
+func (a *Aggregator) onManaRestore(ev events.Combat) {
+	if !ev.AttackerHero || ev.AttackerIllusion || !ev.TargetHero || ev.TargetIllusion {
+		return
+	}
+	if ev.Value <= 0 || ev.AttackerName == "" || ev.TargetName == "" {
+		return
+	}
+	if ev.AttackerName == ev.TargetName || !a.heroIsAlly(ev.AttackerName, ev.TargetName) {
+		return
+	}
+	a.manaRestored[catalog.HeroKey(ev.AttackerName)] += ev.Value
+}
+
 func (a *Aggregator) onAbility(ev events.Combat) {
 	inf := ev.Inflictor
 	if inf == "" || !ev.AttackerHero || ev.AttackerName == "" {
@@ -495,6 +510,8 @@ func (a *Aggregator) Combat(ev events.Combat) {
 		a.onDeath(ev)
 	case events.CombatAbility:
 		a.onAbility(ev)
+	case events.CombatManaRestore:
+		a.onManaRestore(ev)
 	}
 }
 
@@ -564,6 +581,7 @@ func (a *Aggregator) Result() *stats.Match {
 		hk := catalog.HeroKey(p.Hero)
 		heroKeys[i] = hk
 		mp.Healing = a.healingByAttacker[hk]
+		mp.ManaRestored = a.manaRestored[hk]
 		mp.HeroDamage = a.heroDamageByAttacker[hk]
 		mp.DamageTaken = a.damageTakenByTarget[hk]
 		mp.TowerDamage = a.towerDamageByAttacker[hk]

@@ -6,9 +6,10 @@ per-player statistics as one JSON object to stdout.
 
 The output is a drop-in match for `odota-cli`'s `Match` JSON: same field
 names, same types, same hero naming, same `player_id` (0..9) and the same
-`duration_sec`/`buff_duration`/`duration` conventions. Save and purge
-classification includes documented corrections; see `docs/accuracy.md`. No
-Docker, Java or `odota/parser` is required.
+`duration_sec`/`buff_duration`/`duration` conventions, plus a `mana_restored`
+extension. Save, shield, haste and purge classification includes documented
+corrections; see `docs/accuracy.md`. No Docker, Java or `odota/parser` is
+required.
 
 ## Install
 
@@ -123,6 +124,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o man
       "gpm": 658,
       "xpm": 884,
       "healing": 0,
+      "mana_restored": 0,
       "hero_damage": 14380,
       "damage_taken": 12767,
       "tower_damage": 627,
@@ -192,7 +194,7 @@ scoreboard `m_fStuns` total.
 
 ## Validation
 
-Parity was checked against `odota-cli` v0.2.1 on five modern replays. Every field matched exactly for v0.5.0. The later save/purge correction intentionally differs for Oracle False Promise and Wind Waker; `docs/accuracy.md` lists the known differences.
+Parity was checked against `odota-cli` v0.2.1 on five modern replays. Every field matched exactly for v0.5.0. Later catalog corrections and the `mana_restored` extension intentionally differ; `docs/accuracy.md` lists the known differences.
 
 The parity harness is `tests/replay/parity_test.go`. It expects the external
 corpus (`MANTA_REPLAY_DIR`, default `../../../replays`) with `<id>.dem` and

@@ -36,7 +36,7 @@ func TestSchemaMatchesOdotaCLI(t *testing.T) {
 		`"match_id"`, `"duration_sec"`, `"radiant_win"`, `"players"`,
 		`"steam_id"`, `"player_id"`, `"hero_id"`, `"hero"`, `"team"`, `"name"`,
 		`"position"`, `"lane"`, `"kills"`, `"deaths"`, `"assists"`, `"level"`,
-		`"last_hits"`, `"networth"`, `"gpm"`, `"xpm"`, `"healing"`,
+		`"last_hits"`, `"networth"`, `"gpm"`, `"xpm"`, `"healing"`, `"mana_restored"`,
 		`"hero_damage"`, `"damage_taken"`, `"tower_damage"`, `"time_dead"`,
 		`"stun_duration"`, `"stun_sources"`, `"buff_duration"`, `"buff_sources"`,
 		`"fear_duration"`, `"roots_duration"`, `"leash_duration"`, `"trap_duration"`,

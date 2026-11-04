@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
+## Unreleased
+
+### Added
+
+- `mana_restored` per player, counting mana restored to allied heroes. It is sourced from `DOTA_COMBATLOG_MANA_RESTORED`; current HLTV replays may not emit type 24.
+- Save sources for Shadow Demon Disruption and Linken's active spellblock.
+- Shield sources for Pipe, Pavise, Crimson Guard and Solar Crest.
+- Haste sources for Marci Rebound, Grimstroke Ink Swell and the current Drum active.
+- `buff_stats` sources for Sven Warcry, Troll Battle Trance with the level 20 talent, and Boots of Bearing.
+
+### Fixed
+
+- Corrected the Omniknight Repel, Pipe, Pavise, Marci Bodyguard, Chen Divine Favor and Drum modifier keys.
+- Removed self-only Bounty Hunter Wind Walk from `invisibility`.
+- Removed the empty `mana_restore` buff category.
+
 ## 0.5.2 - 2026-11-04
 
 ### Fixed

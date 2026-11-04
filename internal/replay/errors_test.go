@@ -5,6 +5,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/dotabuff/manta/dota"
+
+	"github.com/drawiks/manta-cli/internal/events"
 )
 
 func TestParseStreamClassifiesBadMagic(t *testing.T) {
@@ -27,5 +31,12 @@ func TestParseStreamClassifiesMissingPlayerResource(t *testing.T) {
 	err := ParseStream(context.Background(), bytes.NewReader(header), nopHandler{})
 	if !errors.Is(err, ErrNoPlayerResource) {
 		t.Fatalf("ParseStream(header only) = %v, want ErrNoPlayerResource", err)
+	}
+}
+
+func TestCombatTypeManaRestore(t *testing.T) {
+	got, ok := combatType(dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_MANA_RESTORED)
+	if !ok || got != events.CombatManaRestore {
+		t.Fatalf("combatType(mana restored) = %v, %v; want %v, true", got, ok, events.CombatManaRestore)
 	}
 }

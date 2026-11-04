@@ -152,6 +152,125 @@ func TestSaveAndPurgeClassification(t *testing.T) {
 	}
 }
 
+func TestNewBuffSources(t *testing.T) {
+	a := New()
+	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{
+		{Slot: 0, Hero: "npc_dota_hero_oracle", Team: "dire"},
+		{Slot: 1, Hero: "npc_dota_hero_lion", Team: "dire"},
+		{Slot: 2, Hero: "npc_dota_hero_axe", Team: "radiant"},
+	}})
+	for slot, team := range []string{"dire", "dire", "radiant"} {
+		a.Slot(events.Slot{Slot: slot, Team: team, Hero: a.roster[slot].Hero})
+	}
+
+	modifier := func(at int, inflictor string, add bool) {
+		t.Helper()
+		kind := events.CombatModifierRemove
+		if add {
+			kind = events.CombatModifierAdd
+		}
+		a.Combat(events.Combat{
+			Time:         at,
+			Type:         kind,
+			AttackerName: "npc_dota_hero_oracle",
+			TargetName:   "npc_dota_hero_lion",
+			Inflictor:    inflictor,
+			AttackerHero: true,
+			TargetHero:   true,
+		})
+	}
+	add := func(start, end int, inflictor string) {
+		modifier(start, inflictor, true)
+		modifier(end, inflictor, false)
+	}
+
+	add(100, 104, "modifier_shadow_demon_disruption")
+	add(110, 124, "modifier_item_sphere_target")
+	add(130, 135, "modifier_omniknight_martyr")
+	add(140, 148, "modifier_item_pipe_barrier")
+	add(150, 157, "modifier_item_pavise_shield")
+	add(160, 167, "modifier_item_crimson_guard_extra")
+	add(170, 178, "modifier_sven_warcry")
+	add(180, 186, "modifier_troll_warlord_battle_trance_aura")
+	add(190, 196, "modifier_item_boots_of_bearing_active")
+	add(200, 206, "modifier_chen_divine_favor_armor_buff")
+	add(210, 216, "modifier_item_ancient_janggo_active")
+	add(220, 224, "modifier_marci_companion_run_ally_movespeed")
+	add(230, 233, "modifier_grimstroke_spirit_walk_buff")
+
+	res := a.Result()
+	oracle := res.Players[0]
+	if oracle.BuffDuration != 84 {
+		t.Errorf("oracle buff_duration = %v, want 84", oracle.BuffDuration)
+	}
+
+	want := map[string]struct {
+		category string
+		duration float64
+	}{
+		"shadow_demon_disruption":            {"save", 4},
+		"item_sphere_target":                 {"save", 14},
+		"omniknight_martyr":                  {"spell_immunity", 5},
+		"item_pipe_barrier":                  {"shield", 8},
+		"item_pavise_shield":                 {"shield", 7},
+		"item_crimson_guard_extra":           {"shield", 7},
+		"sven_warcry":                        {"buff_stats", 8},
+		"troll_warlord_battle_trance":        {"buff_stats", 6},
+		"item_boots_of_bearing":              {"buff_stats", 6},
+		"chen_divine_favor":                  {"buff_stats", 6},
+		"item_ancient_janggo":                {"buff_haste", 6},
+		"marci_companion_run_ally_movespeed": {"buff_haste", 4},
+		"grimstroke_spirit_walk":             {"buff_haste", 3},
+	}
+	if len(oracle.BuffSources) != len(want) {
+		t.Fatalf("oracle buff_sources = %+v", oracle.BuffSources)
+	}
+	for _, source := range oracle.BuffSources {
+		expected, ok := want[source.Inflictor]
+		if !ok {
+			t.Errorf("unexpected source %+v", source)
+			continue
+		}
+		if source.Category != expected.category || source.Duration != expected.duration {
+			t.Errorf("source %+v, want category %q duration %v", source, expected.category, expected.duration)
+		}
+	}
+}
+
+func TestManaRestoreAlliesOnly(t *testing.T) {
+	a := New()
+	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{
+		{Slot: 0, Hero: "npc_dota_hero_oracle", Team: "dire"},
+		{Slot: 1, Hero: "npc_dota_hero_lion", Team: "dire"},
+		{Slot: 2, Hero: "npc_dota_hero_axe", Team: "radiant"},
+	}})
+	for slot, team := range []string{"dire", "dire", "radiant"} {
+		a.Slot(events.Slot{Slot: slot, Team: team, Hero: a.roster[slot].Hero})
+	}
+
+	restore := func(target string, value int) {
+		t.Helper()
+		a.Combat(events.Combat{
+			Type:         events.CombatManaRestore,
+			AttackerName: "npc_dota_hero_oracle",
+			TargetName:   target,
+			Value:        value,
+			AttackerHero: true,
+			TargetHero:   true,
+		})
+	}
+	restore("npc_dota_hero_lion", 100)
+	restore("npc_dota_hero_oracle", 200)
+	restore("npc_dota_hero_axe", 300)
+	restore("npc_dota_creep_badguys_melee", 400)
+	restore("npc_dota_hero_lion", 50)
+
+	res := a.Result()
+	if res.Players[0].ManaRestored != 150 {
+		t.Errorf("oracle mana_restored = %d, want 150", res.Players[0].ManaRestored)
+	}
+}
+
 func TestUndyingTombstoneBunkerSave(t *testing.T) {
 	a := New()
 	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{
