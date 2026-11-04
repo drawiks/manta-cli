@@ -86,6 +86,50 @@ func TestAggregateCombatAndIntervals(t *testing.T) {
 	}
 }
 
+func TestGoldLostUsesClientField(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		info events.PlayerInfo
+		want int
+	}{
+		{
+			name: "client field wins",
+			info: events.PlayerInfo{
+				Slot:        0,
+				Hero:        "npc_dota_hero_axe",
+				Team:        "radiant",
+				GoldLost:    150,
+				HasGoldLost: true,
+			},
+			want: 150,
+		},
+		{
+			name: "combat log fallback",
+			info: events.PlayerInfo{
+				Slot: 0,
+				Hero: "npc_dota_hero_axe",
+				Team: "radiant",
+			},
+			want: 200,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := New()
+			a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{tc.info}})
+			a.Slot(events.Slot{Slot: 0, Team: tc.info.Team, Hero: tc.info.Hero})
+			a.Combat(events.Combat{
+				Type:       events.CombatGold,
+				TargetName: tc.info.Hero,
+				Value:      -200,
+				GoldReason: 1,
+			})
+			if got := a.Result().Players[0].GoldLost; got != tc.want {
+				t.Errorf("gold_lost = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSaveAndPurgeClassification(t *testing.T) {
 	a := New()
 	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{

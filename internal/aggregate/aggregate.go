@@ -85,10 +85,12 @@ type Aggregator struct {
 	durations     [catalog.KindCount]map[srcKey]float64
 	active        [catalog.KindCount]map[modKey][]activeMod
 
-	goldSpentSmoke map[string]int
-	goldSpentDust  map[string]int
-	goldLostByHero map[string]int
-	courierKills   map[string]int
+	goldSpentSmoke    map[string]int
+	goldSpentDust     map[string]int
+	goldLostByHero    map[string]int
+	goldLostBySlot    map[int]int
+	hasGoldLostBySlot map[int]bool
+	courierKills      map[string]int
 
 	firstBloodSlot int
 
@@ -122,6 +124,8 @@ func New() *Aggregator {
 		goldSpentSmoke:        map[string]int{},
 		goldSpentDust:         map[string]int{},
 		goldLostByHero:        map[string]int{},
+		goldLostBySlot:        map[int]int{},
+		hasGoldLostBySlot:     map[int]bool{},
 		courierKills:          map[string]int{},
 		firstBloodSlot:        -1,
 		mods:                  map[string]catalog.ModClass{},
@@ -134,6 +138,12 @@ func (a *Aggregator) Epilogue(e events.Epilogue) {
 	a.m.DurationSec = e.DurationSec
 	a.m.RadiantWin = e.RadiantWin
 	a.roster = e.Players
+	for _, p := range e.Players {
+		if p.HasGoldLost {
+			a.goldLostBySlot[p.Slot] = p.GoldLost
+			a.hasGoldLostBySlot[p.Slot] = true
+		}
+	}
 }
 
 func (a *Aggregator) Slot(e events.Slot) {
@@ -587,7 +597,11 @@ func (a *Aggregator) Result() *stats.Match {
 		mp.TowerDamage = a.towerDamageByAttacker[hk]
 		mp.GoldSpentSmoke = a.goldSpentSmoke[hk]
 		mp.GoldSpentDust = a.goldSpentDust[hk]
-		mp.GoldLost = a.goldLostByHero[hk]
+		if a.hasGoldLostBySlot[p.Slot] {
+			mp.GoldLost = a.goldLostBySlot[p.Slot]
+		} else {
+			mp.GoldLost = a.goldLostByHero[hk]
+		}
 		mp.CourierKills = a.courierKills[hk]
 		mp.TimeDead = math.Round(a.deadSecondsBySlot[p.Slot])
 	}

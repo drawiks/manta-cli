@@ -2,9 +2,9 @@ package stats
 
 // Match is the parsed statistics for one Dota 2 match.
 //
-// Its JSON encoding is the odota-cli match object: field names, types and
-// omission rules match so the two tools are interchangeable. The zero value is
-// a match with no players and zero values.
+// Its JSON encoding is the odota-cli match object plus the mana_restored
+// extension and the client-sourced gold_lost. The zero value is a match with
+// no players and zero values.
 type Match struct {
 	// MatchID is the Dota 2 match ID, or zero when the replay has none.
 	MatchID int64 `json:"match_id"`
@@ -129,7 +129,7 @@ type Player struct {
 	GoldSpentSmoke int `json:"gold_spent_smoke"`
 	// GoldSpentDust is the gold spent on Dust of Appearance.
 	GoldSpentDust int `json:"gold_spent_dust"`
-	// GoldLost is the gold lost to deaths.
+	// GoldLost is the total gold lost to deaths reported by the game client.
 	GoldLost int `json:"gold_lost"`
 	// CampsStacked is the number of stacked neutral camps.
 	CampsStacked int `json:"camps_stacked"`

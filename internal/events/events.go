@@ -1,11 +1,13 @@
 package events
 
 type PlayerInfo struct {
-	Slot    int
-	SteamID int64
-	Hero    string
-	Name    string
-	Team    string
+	Slot        int
+	SteamID     int64
+	Hero        string
+	Name        string
+	Team        string
+	GoldLost    int
+	HasGoldLost bool
 }
 
 type Epilogue struct {

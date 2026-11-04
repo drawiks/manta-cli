@@ -272,12 +272,15 @@ func parseStream(ctx context.Context, r io.Reader, closer io.Closer, fallbackMat
 			if pi.GetGameTeam() == teamDire {
 				team = "dire"
 			}
+			goldLost, hasGoldLost := st.playerGoldLost(i)
 			players = append(players, events.PlayerInfo{
-				Slot:    i,
-				SteamID: int64(pi.GetSteamid()),
-				Hero:    pi.GetHeroName(),
-				Name:    pi.GetPlayerName(),
-				Team:    team,
+				Slot:        i,
+				SteamID:     int64(pi.GetSteamid()),
+				Hero:        pi.GetHeroName(),
+				Name:        pi.GetPlayerName(),
+				Team:        team,
+				GoldLost:    goldLost,
+				HasGoldLost: hasGoldLost,
 			})
 		}
 		st.gotEpilogue = true
@@ -747,6 +750,18 @@ func (st *replayState) entityName(handle uint64) string {
 	return ""
 }
 
+func (st *replayState) playerGoldLost(slot int) (int, bool) {
+	if slot < 0 || slot >= len(st.slots) {
+		return 0, false
+	}
+	si := st.slots[slot]
+	td := st.teams[si.team]
+	if td == nil || si.teamSlot < 0 {
+		return 0, false
+	}
+	return numInt(td, fmt.Sprintf("m_vecDataTeam.%04d.m_iGoldLostToDeath", si.teamSlot))
+}
+
 func (st *replayState) finishRoster() error {
 	if !st.startKnown {
 		st.gameStart = 0
@@ -764,12 +779,15 @@ func (st *replayState) finishRoster() error {
 		if hero == "" {
 			hero = st.heroName(si.heroHandle)
 		}
+		goldLost, hasGoldLost := st.playerGoldLost(slot)
 		players = append(players, events.PlayerInfo{
-			Slot:    slot,
-			SteamID: si.steamID,
-			Hero:    hero,
-			Name:    si.name,
-			Team:    si.team,
+			Slot:        slot,
+			SteamID:     si.steamID,
+			Hero:        hero,
+			Name:        si.name,
+			Team:        si.team,
+			GoldLost:    goldLost,
+			HasGoldLost: hasGoldLost,
 		})
 	}
 	dur := float64(st.lastCombatTime - st.gameStart)
