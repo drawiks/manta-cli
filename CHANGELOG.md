@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
+## 0.5.4 - 2026-11-04
+
+### Fixed
+
+- `gold_lost` now uses the game client's `m_iGoldLostToDeath`, matching the post-game `gold_lost_to_death` value. The combat-log reason-1 sum remains as a fallback for replays without the client field.
+
+### Notes
+
+- `gold_lost` intentionally differs from `odota-cli` where available unreliable gold was lower than the theoretical death cost. See `docs/accuracy.md`.
+
 ## 0.5.3 - 2026-11-04
 
 ### Added
