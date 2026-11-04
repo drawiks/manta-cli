@@ -383,6 +383,53 @@ func TestMarciUnleashPulseSilence(t *testing.T) {
 	}
 }
 
+func TestOraclePurgeSources(t *testing.T) {
+	a := New()
+	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{
+		{Slot: 0, Hero: "npc_dota_hero_oracle", Team: "dire"},
+		{Slot: 1, Hero: "npc_dota_hero_lion", Team: "dire"},
+	}})
+	for slot, team := range []string{"dire", "dire"} {
+		a.Slot(events.Slot{Slot: slot, Team: team, Hero: a.roster[slot].Hero})
+	}
+	addRemove := func(start, end int, inflictor string) {
+		a.Combat(events.Combat{
+			Time:         start,
+			Type:         events.CombatModifierAdd,
+			AttackerName: "npc_dota_hero_oracle",
+			TargetName:   "npc_dota_hero_lion",
+			Inflictor:    inflictor,
+			AttackerHero: true,
+			TargetHero:   true,
+		})
+		a.Combat(events.Combat{
+			Time:         end,
+			Type:         events.CombatModifierRemove,
+			AttackerName: "npc_dota_hero_oracle",
+			TargetName:   "npc_dota_hero_lion",
+			Inflictor:    inflictor,
+			AttackerHero: true,
+			TargetHero:   true,
+		})
+	}
+	addRemove(10, 15, "modifier_oracle_purifying_flames")
+	addRemove(20, 25, "modifier_oracle_fortunes_end_purge")
+
+	oracle := a.Result().Players[0]
+	purges := map[string]int{}
+	for _, source := range oracle.BuffSources {
+		if source.Category == "purge" {
+			purges[source.Inflictor] += source.Count
+		}
+	}
+	if purges["oracle_purifying_flames"] != 0 {
+		t.Errorf("Purifying Flames was counted as purge: %+v", oracle.BuffSources)
+	}
+	if purges["oracle_fortunes_end_purge"] != 1 {
+		t.Errorf("Fortune's End purge = %d, want 1: %+v", purges["oracle_fortunes_end_purge"], oracle.BuffSources)
+	}
+}
+
 func TestManaRestoreAlliesOnly(t *testing.T) {
 	a := New()
 	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{

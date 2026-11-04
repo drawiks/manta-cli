@@ -42,6 +42,8 @@ func TestClassifyModifier(t *testing.T) {
 		{"modifier_silver_edge_debuff", KindBreak, "", "silver_edge", false},
 		{"modifier_naga_siren_ensnare", KindRoot, "", "naga_siren_ensnare", false},
 		{"modifier_marci_unleash_pulse_silence", KindSilence, "", "marci_unleash_pulse_silence", false},
+		{"modifier_oracle_purifying_flames", KindNone, "", "oracle_purifying_flames", false},
+		{"modifier_oracle_fortunes_end_purge", KindRoot, "", "oracle_fortunes_end_purge", true},
 	}
 	for _, c := range cases {
 		got := ClassifyModifier(c.inf)

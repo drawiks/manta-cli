@@ -197,7 +197,7 @@ var BuffCategories = map[string]string{
 var PurgeModifiers = map[string]bool{
 	"item_guardian_greaves":             true,
 	"legion_commander_press_the_attack": true,
-	"oracle_purifying_flames":           true,
+	"oracle_fortunes_end_purge":         true,
 	"item_lotus_orb_active":             true,
 	"alchemist_berserk_potion":          true,
 	"shadow_demon_purge_slow":           true,

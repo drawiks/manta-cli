@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
+## Unreleased
+
+### Fixed
+
+- Oracle Purifying Flames is no longer counted as a purge. Oracle Fortune's End's basic dispel is counted instead.
+
 ## 0.5.5 - 2026-11-04
 
 ### Fixed
