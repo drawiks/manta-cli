@@ -281,6 +281,108 @@ func TestNewBuffSources(t *testing.T) {
 	}
 }
 
+func TestInkSwellHasteAndShardPurge(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		buyShard  bool
+		wantPurge bool
+	}{
+		{name: "without shard", wantPurge: false},
+		{name: "with shard", buyShard: true, wantPurge: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := New()
+			a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{
+				{Slot: 0, Hero: "npc_dota_hero_grimstroke", Team: "dire"},
+				{Slot: 1, Hero: "npc_dota_hero_lion", Team: "dire"},
+			}})
+			for slot, team := range []string{"dire", "dire"} {
+				a.Slot(events.Slot{Slot: slot, Team: team, Hero: a.roster[slot].Hero})
+			}
+			if tc.buyShard {
+				a.Combat(events.Combat{
+					Time:       1,
+					Type:       events.CombatPurchase,
+					TargetName: "npc_dota_hero_grimstroke",
+					ValueName:  "item_aghanims_shard",
+				})
+			}
+			a.Combat(events.Combat{
+				Time:         10,
+				Type:         events.CombatModifierAdd,
+				AttackerName: "npc_dota_hero_grimstroke",
+				TargetName:   "npc_dota_hero_lion",
+				Inflictor:    "modifier_grimstroke_spirit_walk_buff",
+				AttackerHero: true,
+				TargetHero:   true,
+			})
+			a.Combat(events.Combat{
+				Time:         13,
+				Type:         events.CombatModifierRemove,
+				AttackerName: "npc_dota_hero_grimstroke",
+				TargetName:   "npc_dota_hero_lion",
+				Inflictor:    "modifier_grimstroke_spirit_walk_buff",
+				AttackerHero: true,
+				TargetHero:   true,
+			})
+
+			grim := a.Result().Players[0]
+			var haste, purge bool
+			for _, source := range grim.BuffSources {
+				switch source.Category {
+				case "buff_haste":
+					haste = source.Duration == 3
+				case "purge":
+					purge = source.Count == 1
+				}
+			}
+			if !haste {
+				t.Errorf("Ink Swell haste not counted: %+v", grim.BuffSources)
+			}
+			if purge != tc.wantPurge {
+				t.Errorf("Ink Swell purge = %v, want %v: %+v", purge, tc.wantPurge, grim.BuffSources)
+			}
+		})
+	}
+}
+
+func TestMarciUnleashPulseSilence(t *testing.T) {
+	a := New()
+	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{
+		{Slot: 0, Hero: "npc_dota_hero_marci", Team: "dire"},
+		{Slot: 1, Hero: "npc_dota_hero_axe", Team: "radiant"},
+	}})
+	for slot, team := range []string{"dire", "radiant"} {
+		a.Slot(events.Slot{Slot: slot, Team: team, Hero: a.roster[slot].Hero})
+	}
+	a.Combat(events.Combat{
+		Time:         10,
+		Type:         events.CombatModifierAdd,
+		AttackerName: "npc_dota_hero_marci",
+		TargetName:   "npc_dota_hero_axe",
+		Inflictor:    "modifier_marci_unleash_pulse_silence",
+		AttackerHero: true,
+		TargetHero:   true,
+	})
+	a.Combat(events.Combat{
+		Time:         15,
+		Type:         events.CombatModifierRemove,
+		AttackerName: "npc_dota_hero_marci",
+		TargetName:   "npc_dota_hero_axe",
+		Inflictor:    "modifier_marci_unleash_pulse_silence",
+		AttackerHero: true,
+		TargetHero:   true,
+	})
+
+	marci := a.Result().Players[0]
+	if marci.SilenceDuration != 5 {
+		t.Errorf("Marci silence_duration = %v, want 5", marci.SilenceDuration)
+	}
+	if len(marci.SilenceSources) != 1 || marci.SilenceSources[0].Inflictor != "marci_unleash_pulse_silence" {
+		t.Errorf("Marci silence_sources = %+v", marci.SilenceSources)
+	}
+}
+
 func TestManaRestoreAlliesOnly(t *testing.T) {
 	a := New()
 	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{

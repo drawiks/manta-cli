@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
+## Unreleased
+
+### Fixed
+
+- Grimstroke Ink Swell is named correctly; its haste is counted without Aghanim's Shard, and the Shard adds only the purge.
+- Marci Unleash pulse silence is counted as silence.
+- `mana_restored` includes the actual Bottle healing-over-time applied to an ally.
+
 ## 0.5.4 - 2026-11-04
 
 ### Fixed

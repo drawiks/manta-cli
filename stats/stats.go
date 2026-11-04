@@ -57,7 +57,7 @@ type Player struct {
 	XPM int `json:"xpm"`
 	// Healing is the healing done to allies.
 	Healing int `json:"healing"`
-	// ManaRestored is the mana restored to allied heroes from MANA_RESTORED events.
+	// ManaRestored is the mana restored to allied heroes, including Bottle healing over time.
 	ManaRestored int `json:"mana_restored"`
 	// HeroDamage is the damage dealt to heroes.
 	HeroDamage int `json:"hero_damage"`

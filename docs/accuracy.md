@@ -23,12 +23,13 @@ A sweep of 18 available replays (180 player rows) matched `m_iGoldLostToDeath` e
 - Undying's Tombstone Bunker (`modifier_undying_tombstone_bunker_friendly`) is counted as a save.
 - Shadow Demon Disruption and Linken's active spellblock are saves.
 - Pipe, Pavise, Crimson Guard and Solar Crest barriers are shields; Solar Crest no longer counts as `buff_stats`.
-- Marci Rebound and Grimstroke Ink Swell count as haste; Drum and Boots of Bearing use their current active modifiers.
+- Marci Rebound and Grimstroke Ink Swell count as haste; Ink Swell's Aghanim's Shard adds only the purge, not the haste.
 - Sven Warcry, Troll Battle Trance with the level 20 talent, and Boots of Bearing are `buff_stats`.
+- Marci Unleash pulse silence (`modifier_marci_unleash_pulse_silence`) is counted as silence.
 - Stale modifier keys for Omniknight Repel, Pipe, Pavise, Marci Bodyguard, Chen Divine Favor and Drum were corrected.
 - Bounty Hunter Wind Walk was removed from `invisibility`; it is self-only.
-- `mana_restore` was removed from buff categories. `mana_restored` counts mana restored to allied heroes only.
-- `mana_restored` uses `DOTA_COMBATLOG_MANA_RESTORED` (type 24). Current HLTV replays in the corpus do not emit type 24, so the field is zero there; a replay that carries the event will populate it.
+- `mana_restore` was removed from buff categories. `mana_restored` counts mana restored to allied heroes only; self-casts are excluded.
+- `mana_restored` uses `DOTA_COMBATLOG_MANA_RESTORED` (type 24) when present and adds the actual Bottle healing-over-time applied to an ally. Current HLTV replays do not emit type 24, so those events are absent; Bottle is measured from `modifier_bottle_regeneration` and the target's mana.
 
 Known differences in the five-replay corpus:
 

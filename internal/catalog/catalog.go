@@ -406,6 +406,7 @@ func classifyTaunt(inf string) bool {
 
 var silenceSubstrings = []string{
 	"crippling_fear",
+	"marci_unleash_pulse_silence",
 	"static_storm",
 	"ancient_seal",
 	"doom_bringer_doom",

@@ -31,6 +31,10 @@ const (
 
 	teamRadiant = 2
 	teamDire    = 3
+
+	bottleModifier      = "modifier_bottle_regeneration"
+	bottleRegenAmount   = 60.0
+	bottleRegenDuration = 2.7
 )
 
 var matchIDRe = regexp.MustCompile(`^(\d+)`)
@@ -122,6 +126,14 @@ type pendingCombat struct {
 	ev      events.Combat
 }
 
+type bottleRestore struct {
+	caster         string
+	target         string
+	last           int
+	amount         float64
+	sawManaRestore bool
+}
+
 type chatEvent struct {
 	kind    string
 	player1 int
@@ -149,6 +161,7 @@ type replayState struct {
 	pending          []pendingCombat
 	pendingChat      []chatEvent
 	pendingIntervals []events.Interval
+	bottle           map[string]*bottleRestore
 
 	lastEmitted int
 	hasEmitted  bool
@@ -210,6 +223,7 @@ func parseStream(ctx context.Context, r io.Reader, closer io.Closer, fallbackMat
 		teams:        map[string]*manta.Entity{},
 		handleSlot:   map[uint64]int{},
 		abilityNames: map[uint64]string{},
+		bottle:       map[string]*bottleRestore{},
 		matchID:      fallbackMatchID,
 	}
 
@@ -255,6 +269,7 @@ func parseStream(ctx context.Context, r io.Reader, closer io.Closer, fallbackMat
 			return err
 		}
 		st.maybeSample()
+		st.sampleBottle()
 		return nil
 	})
 
@@ -406,6 +421,134 @@ func (st *replayState) assignHero(handle uint64, hero string) {
 	st.handler.Slot(events.Slot{Slot: slot, Team: st.slots[slot].team, Hero: hero})
 }
 
+func (st *replayState) trackBottle(ev events.Combat) {
+	switch ev.Type {
+	case events.CombatModifierAdd:
+		st.startBottle(ev)
+	case events.CombatModifierRemove:
+		st.finishBottle(ev)
+	}
+}
+
+func (st *replayState) startBottle(ev events.Combat) {
+	if ev.Inflictor != bottleModifier || !ev.AttackerHero || !ev.TargetHero ||
+		ev.AttackerIllusion || ev.TargetIllusion ||
+		ev.AttackerName == "" || ev.TargetName == "" || ev.AttackerName == ev.TargetName {
+		return
+	}
+	if !st.areAllies(ev.AttackerName, ev.TargetName) {
+		return
+	}
+	if st.heroEntity(ev.TargetName) == nil {
+		return
+	}
+	if _, ok := st.bottle[ev.TargetName]; ok {
+		return
+	}
+	st.bottle[ev.TargetName] = &bottleRestore{
+		caster: ev.AttackerName,
+		target: ev.TargetName,
+		last:   ev.Time,
+	}
+}
+
+func (st *replayState) finishBottle(ev events.Combat) {
+	if ev.Inflictor != bottleModifier {
+		return
+	}
+	b := st.bottle[ev.TargetName]
+	if b == nil || b.caster != ev.AttackerName {
+		return
+	}
+	st.sampleBottleTarget(b, ev.Time)
+	if !b.sawManaRestore && b.amount > 0 {
+		st.handler.Combat(events.Combat{
+			Time:         ev.Time,
+			Type:         events.CombatManaRestore,
+			AttackerName: b.caster,
+			TargetName:   b.target,
+			Value:        int(math.Round(b.amount)),
+			AttackerHero: true,
+			TargetHero:   true,
+		})
+	}
+	delete(st.bottle, ev.TargetName)
+}
+
+func (st *replayState) markBottleManaRestore(ev events.Combat) {
+	for _, b := range st.bottle {
+		if b.caster == ev.AttackerName && b.target == ev.TargetName {
+			b.sawManaRestore = true
+		}
+	}
+}
+
+func (st *replayState) sampleBottle() {
+	if len(st.bottle) == 0 || !st.startKnown {
+		return
+	}
+	now := st.currentTime() - st.gameStart
+	for _, b := range st.bottle {
+		st.sampleBottleTarget(b, now)
+	}
+}
+
+func (st *replayState) sampleBottleTarget(b *bottleRestore, now int) {
+	if now <= b.last {
+		return
+	}
+	e := st.heroEntity(b.target)
+	if e == nil {
+		return
+	}
+	if v, ok := numInt(e, "m_lifeState"); ok && v != 0 {
+		b.last = now
+		return
+	}
+	mana, ok := numFloat(e, "m_flMana")
+	if !ok {
+		return
+	}
+	maxMana, ok := numFloat(e, "m_flMaxMana")
+	if !ok {
+		return
+	}
+	b.amount += bottleManaRestored(float64(now-b.last), mana, maxMana)
+	b.last = now
+}
+
+func bottleManaRestored(dt, mana, maxMana float64) float64 {
+	if dt <= 0 || maxMana <= mana {
+		return 0
+	}
+	return math.Min((bottleRegenAmount/bottleRegenDuration)*dt, maxMana-mana)
+}
+
+func (st *replayState) heroEntity(name string) *manta.Entity {
+	for i := 0; i < len(st.slots); i++ {
+		if catalog.HeroKey(st.slots[i].hero) != catalog.HeroKey(name) {
+			continue
+		}
+		return st.p.FindEntityByHandle(st.slots[i].heroHandle)
+	}
+	return nil
+}
+
+func (st *replayState) areAllies(a, b string) bool {
+	ta, oka := st.heroTeam(a)
+	tb, okb := st.heroTeam(b)
+	return oka && okb && ta == tb
+}
+
+func (st *replayState) heroTeam(name string) (string, bool) {
+	for i := 0; i < len(st.slots); i++ {
+		if catalog.HeroKey(st.slots[i].hero) == catalog.HeroKey(name) {
+			return st.slots[i].team, true
+		}
+	}
+	return "", false
+}
+
 func (st *replayState) handleCombat(e *dota.CMsgDOTACombatLogEntry) {
 	rawTime := int(math.Round(float64(e.GetTimestamp())))
 	st.lastCombatTime = rawTime
@@ -437,7 +580,11 @@ func (st *replayState) handleCombat(e *dota.CMsgDOTACombatLogEntry) {
 		return
 	}
 	ev.Time = rawTime - st.gameStart
+	if ev.Type == events.CombatManaRestore {
+		st.markBottleManaRestore(ev)
+	}
 	st.handler.Combat(ev)
+	st.trackBottle(ev)
 }
 
 func (st *replayState) combatEvent(e *dota.CMsgDOTACombatLogEntry, t events.CombatType) events.Combat {
