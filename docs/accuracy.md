@@ -14,11 +14,14 @@ The interval is sampled after packet entities are applied. Sampling on the net t
 - Wind Waker (`modifier_wind_waker`) is counted as a save.
 - Eul's Cyclone, Pugna Decrepify, Underlord Dark Rift and Abaddon Borrowed Time are not save buffs.
 - Disperser's movespeed buff is counted as a purge application, not a save.
+- Undying's Tombstone Bunker (`modifier_undying_tombstone_bunker_friendly`) is counted as a save.
 
 Known differences in the five-replay corpus:
 
 - `9048749977`: Hoodwink has `wind_waker` save duration 9 where the reference has 0.
 - `9065268582`: Oracle has `oracle_false_promise` save duration 59 where the reference has 0.
+
+Undying is not present in the five-replay corpus, so the Tombstone Bunker correction adds no harness difference there.
 
 `make parity` reports these differences. Do not add a tolerance; update or rebase the references, or add an explicit divergence allowlist, before claiming exact parity again.
 

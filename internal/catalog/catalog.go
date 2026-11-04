@@ -154,6 +154,7 @@ var BuffCategories = map[string]string{
 	"tusk_snowball":                          "save",
 	"ringmaster_the_box_buff":                "save",
 	"wind_waker":                             "save",
+	"undying_tombstone_bunker_friendly":      "save",
 	"item_force_staff":                       "save",
 	"item_hurricane_pike":                    "save",
 

@@ -13,6 +13,9 @@ func TestClassifyModifier(t *testing.T) {
 		{"modifier_dazzle_shallow_grave", KindBuff, "save", "dazzle_shallow_grave", false},
 		{"modifier_oracle_false_promise_timer", KindBuff, "save", "oracle_false_promise", false},
 		{"modifier_wind_waker", KindBuff, "save", "wind_waker", false},
+		{"modifier_undying_tombstone_bunker_friendly", KindBuff, "save", "undying_tombstone_bunker_friendly", false},
+		{"modifier_undying_tombstone_bunker", KindNone, "", "undying_tombstone_bunker", false},
+		{"modifier_undying_tombstone_bunker_cooldown", KindNone, "", "undying_tombstone_bunker_cooldown", false},
 		{"modifier_disperser_movespeed_buff", KindNone, "", "disperser_movespeed", true},
 		{"modifier_eul_cyclone", KindNone, "", "eul_cyclone", false},
 		{"modifier_pugna_decrepify", KindNone, "", "pugna_decrepify", false},
@@ -50,6 +53,9 @@ func TestBuffAndPurgeMaps(t *testing.T) {
 	}
 	if BuffCategories["wind_waker"] != "save" {
 		t.Error("wind waker must be a save")
+	}
+	if BuffCategories["undying_tombstone_bunker_friendly"] != "save" {
+		t.Error("undying tombstone bunker friendly must be a save")
 	}
 	if !PurgeModifiers["disperser_movespeed_buff"] {
 		t.Error("disperser movespeed buff must be a purge")

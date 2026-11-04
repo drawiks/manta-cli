@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
+## Unreleased
+
+### Fixed
+
+- Undying's Tombstone Bunker counts as a save through `modifier_undying_tombstone_bunker_friendly`.
+
 ## 0.5.1 - 2026-11-04
 
 ### Fixed

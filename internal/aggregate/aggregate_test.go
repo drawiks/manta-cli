@@ -152,6 +152,55 @@ func TestSaveAndPurgeClassification(t *testing.T) {
 	}
 }
 
+func TestUndyingTombstoneBunkerSave(t *testing.T) {
+	a := New()
+	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{
+		{Slot: 0, Hero: "npc_dota_hero_undying", Team: "dire"},
+		{Slot: 1, Hero: "npc_dota_hero_pudge", Team: "dire"},
+		{Slot: 2, Hero: "npc_dota_hero_axe", Team: "radiant"},
+	}})
+	for slot, team := range []string{"dire", "dire", "radiant"} {
+		a.Slot(events.Slot{Slot: slot, Team: team, Hero: a.roster[slot].Hero})
+	}
+
+	modifier := func(add bool, at int, target, inflictor string) {
+		t.Helper()
+		kind := events.CombatModifierRemove
+		if add {
+			kind = events.CombatModifierAdd
+		}
+		a.Combat(events.Combat{
+			Time:         at,
+			Type:         kind,
+			AttackerName: "npc_dota_hero_undying",
+			TargetName:   target,
+			Inflictor:    inflictor,
+			AttackerHero: true,
+			TargetHero:   true,
+		})
+	}
+
+	modifier(true, 100, "npc_dota_hero_pudge", "modifier_undying_tombstone_bunker_friendly")
+	modifier(false, 105, "npc_dota_hero_pudge", "modifier_undying_tombstone_bunker_friendly")
+	modifier(true, 100, "npc_dota_hero_pudge", "modifier_undying_tombstone_bunker_cooldown")
+	modifier(false, 102, "npc_dota_hero_pudge", "modifier_undying_tombstone_bunker_cooldown")
+	modifier(true, 110, "npc_dota_hero_undying", "modifier_undying_tombstone_bunker_friendly")
+	modifier(false, 115, "npc_dota_hero_undying", "modifier_undying_tombstone_bunker_friendly")
+
+	res := a.Result()
+	undying := res.Players[0]
+	if undying.BuffDuration != 5 {
+		t.Errorf("undying buff_duration = %v, want 5", undying.BuffDuration)
+	}
+	if len(undying.BuffSources) != 1 {
+		t.Fatalf("undying buff_sources = %+v", undying.BuffSources)
+	}
+	source := undying.BuffSources[0]
+	if source.Inflictor != "undying_tombstone_bunker_friendly" || source.Category != "save" || source.Duration != 5 {
+		t.Errorf("undying buff source = %+v", source)
+	}
+}
+
 func BenchmarkAggregate(b *testing.B) {
 	a := New()
 	a.Epilogue(events.Epilogue{
