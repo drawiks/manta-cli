@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
+## Unreleased
+
+### Fixed
+
+- Oracle Fortune's End is counted as a purge when cast on an ally with an active enemy debuff, even though the game leaves no purge modifier on the ally.
+
 ## 0.5.6 - 2026-11-04
 
 ### Fixed

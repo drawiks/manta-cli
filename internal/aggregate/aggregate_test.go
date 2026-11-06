@@ -388,32 +388,53 @@ func TestOraclePurgeSources(t *testing.T) {
 	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{
 		{Slot: 0, Hero: "npc_dota_hero_oracle", Team: "dire"},
 		{Slot: 1, Hero: "npc_dota_hero_lion", Team: "dire"},
+		{Slot: 2, Hero: "npc_dota_hero_rubick", Team: "radiant"},
 	}})
-	for slot, team := range []string{"dire", "dire"} {
+	for slot, team := range []string{"dire", "dire", "radiant"} {
 		a.Slot(events.Slot{Slot: slot, Team: team, Hero: a.roster[slot].Hero})
 	}
-	addRemove := func(start, end int, inflictor string) {
+	fortunesEnd := func(at int, target string) {
 		a.Combat(events.Combat{
-			Time:         start,
-			Type:         events.CombatModifierAdd,
+			Time:         at,
+			Type:         events.CombatAbility,
 			AttackerName: "npc_dota_hero_oracle",
-			TargetName:   "npc_dota_hero_lion",
-			Inflictor:    inflictor,
+			TargetName:   target,
+			Inflictor:    "oracle_fortunes_end",
 			AttackerHero: true,
 			TargetHero:   true,
 		})
+	}
+	modifier := func(at int, add bool, attacker, target, inflictor string) {
+		typ := events.CombatModifierRemove
+		if add {
+			typ = events.CombatModifierAdd
+		}
 		a.Combat(events.Combat{
-			Time:         end,
-			Type:         events.CombatModifierRemove,
-			AttackerName: "npc_dota_hero_oracle",
-			TargetName:   "npc_dota_hero_lion",
+			Time:         at,
+			Type:         typ,
+			AttackerName: attacker,
+			TargetName:   target,
 			Inflictor:    inflictor,
 			AttackerHero: true,
 			TargetHero:   true,
 		})
 	}
-	addRemove(10, 15, "modifier_oracle_purifying_flames")
-	addRemove(20, 25, "modifier_oracle_fortunes_end_purge")
+
+	// Enemy debuff present: Fortune's End on an ally applies a purge.
+	modifier(10, true, "npc_dota_hero_rubick", "npc_dota_hero_lion", "modifier_rubick_fade_bolt_debuff")
+	fortunesEnd(11, "npc_dota_hero_lion")
+	modifier(12, false, "npc_dota_hero_rubick", "npc_dota_hero_lion", "modifier_rubick_fade_bolt_debuff")
+
+	// No active debuff: no purge.
+	fortunesEnd(20, "npc_dota_hero_lion")
+
+	// Purifying Flames is a heal, not a purge.
+	modifier(30, true, "npc_dota_hero_oracle", "npc_dota_hero_lion", "modifier_oracle_purifying_flames")
+	modifier(31, false, "npc_dota_hero_oracle", "npc_dota_hero_lion", "modifier_oracle_purifying_flames")
+
+	// Enemy target and self-target are not ally purges.
+	fortunesEnd(40, "npc_dota_hero_rubick")
+	fortunesEnd(50, "npc_dota_hero_oracle")
 
 	oracle := a.Result().Players[0]
 	purges := map[string]int{}
@@ -425,8 +446,8 @@ func TestOraclePurgeSources(t *testing.T) {
 	if purges["oracle_purifying_flames"] != 0 {
 		t.Errorf("Purifying Flames was counted as purge: %+v", oracle.BuffSources)
 	}
-	if purges["oracle_fortunes_end_purge"] != 1 {
-		t.Errorf("Fortune's End purge = %d, want 1: %+v", purges["oracle_fortunes_end_purge"], oracle.BuffSources)
+	if purges["oracle_fortunes_end"] != 1 {
+		t.Errorf("Fortune's End purge = %d, want 1: %+v", purges["oracle_fortunes_end"], oracle.BuffSources)
 	}
 }
 

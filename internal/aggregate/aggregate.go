@@ -79,6 +79,7 @@ type Aggregator struct {
 	buffSources   map[buffKey]float64
 	healSources   map[srcKey]healAgg
 	purgeCounts   map[srcKey]int
+	enemyMods     map[string]map[string]int
 	healsByTarget map[string][]healActive
 	shardAt       map[string]int
 	talents       map[talentKey]int
@@ -118,6 +119,7 @@ func New() *Aggregator {
 		buffSources:           map[buffKey]float64{},
 		healSources:           map[srcKey]healAgg{},
 		purgeCounts:           map[srcKey]int{},
+		enemyMods:             map[string]map[string]int{},
 		healsByTarget:         map[string][]healActive{},
 		shardAt:               map[string]int{},
 		talents:               map[talentKey]int{},
@@ -179,6 +181,12 @@ func (a *Aggregator) heroIsAlly(x, y string) bool {
 	tx, okX := a.heroTeam[catalog.HeroKey(x)]
 	ty, okY := a.heroTeam[catalog.HeroKey(y)]
 	return okX && okY && tx == ty
+}
+
+func (a *Aggregator) heroIsEnemy(x, y string) bool {
+	tx, okX := a.heroTeam[catalog.HeroKey(x)]
+	ty, okY := a.heroTeam[catalog.HeroKey(y)]
+	return okX && okY && tx != ty
 }
 
 func (a *Aggregator) Interval(iv events.Interval) {
@@ -346,6 +354,37 @@ func (a *Aggregator) popBuff(attacker, target, clean string, t int) {
 	}
 }
 
+func (a *Aggregator) trackEnemyModifier(ev events.Combat, add bool) {
+	if ev.Inflictor == "" || ev.TargetName == "" {
+		return
+	}
+	target := catalog.HeroKey(ev.TargetName)
+	mods := a.enemyMods[target]
+	if add {
+		if !ev.AttackerHero || ev.AttackerIllusion || ev.AttackerName == "" ||
+			ev.AttackerName == ev.TargetName || !a.heroIsEnemy(ev.AttackerName, ev.TargetName) {
+			return
+		}
+		if mods == nil {
+			mods = map[string]int{}
+			a.enemyMods[target] = mods
+		}
+		mods[ev.Inflictor]++
+		return
+	}
+	if mods == nil {
+		return
+	}
+	if mods[ev.Inflictor] <= 1 {
+		delete(mods, ev.Inflictor)
+		if len(mods) == 0 {
+			delete(a.enemyMods, target)
+		}
+		return
+	}
+	mods[ev.Inflictor]--
+}
+
 func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 	if !ev.TargetHero || ev.TargetIllusion {
 		return
@@ -362,6 +401,7 @@ func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 	if attacker == target {
 		return
 	}
+	a.trackEnemyModifier(ev, add)
 	c := a.classify(inf)
 	if add {
 		if c.Purge && a.heroIsAlly(attacker, target) && a.gateOK(c.Gate, c.Talent, attacker, ev.Time) {
@@ -462,13 +502,19 @@ func (a *Aggregator) onAbility(ev events.Combat) {
 	if _, ok := a.heroTeam[hk]; !ok {
 		return
 	}
+	target := ev.TargetName
+	if inf == "oracle_fortunes_end" && ev.TargetHero && !ev.TargetIllusion &&
+		target != "" && target != ev.AttackerName && a.heroIsAlly(ev.AttackerName, target) &&
+		len(a.enemyMods[catalog.HeroKey(target)]) > 0 {
+		a.purgeCounts[srcKey{hk, "oracle_fortunes_end"}]++
+		return
+	}
 	if talent, ok := catalog.TalentGlobalAbilities[inf]; ok {
 		if a.gateOK(catalog.GateTalent, talent, ev.AttackerName, ev.Time) {
 			a.purgeCounts[srcKey{hk, catalog.CanonicalName(inf)}]++
 		}
 		return
 	}
-	target := ev.TargetName
 	if talent, ok := catalog.TalentPurgeAbilities[inf]; ok &&
 		ev.TargetHero && !ev.TargetIllusion &&
 		target != "" && ev.AttackerName != target && a.heroIsAlly(ev.AttackerName, target) &&

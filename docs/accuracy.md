@@ -17,7 +17,7 @@ A sweep of 18 available replays (180 player rows) matched `m_iGoldLostToDeath` e
 `v0.5.0` matched `odota-cli` exactly. The following corrections intentionally differ from it:
 
 - Oracle False Promise is tracked through `modifier_oracle_false_promise_timer` and counted as a save.
-- Oracle Purifying Flames is a heal, not a purge. Oracle Fortune's End's basic dispel is counted through `modifier_oracle_fortunes_end_purge` when it targets an ally.
+- Oracle Purifying Flames is a heal, not a purge. Oracle Fortune's End's basic dispel is counted from the ability cast when it targets an ally with at least one active enemy-applied modifier; the game does not leave a purge modifier on the ally.
 - Wind Waker (`modifier_wind_waker`) is counted as a save.
 - Eul's Cyclone, Pugna Decrepify, Underlord Dark Rift and Abaddon Borrowed Time are not save buffs.
 - Disperser's movespeed buff is counted as a purge application, not a save.
@@ -38,7 +38,7 @@ Known differences in the five-replay corpus:
 - `9053590215`: `gold_lost` differs for 8 players.
 - `9064082159`: `gold_lost` differs for 8 players.
 - `9064911131`: `gold_lost` differs for 7 players.
-- `9065268582`: Oracle has `oracle_false_promise` save duration 59 where the reference has 0; the reference also has 46 Purifying Flames purge applications that are removed. `gold_lost` differs for 9 players.
+- `9065268582`: Oracle has `oracle_false_promise` save duration 59 where the reference has 0; the reference's 46 Purifying Flames purge applications are replaced by 2 Fortune's End ally purges. `gold_lost` differs for 9 players.
 
 Undying is not present in the five-replay corpus, so the Tombstone Bunker correction adds no harness difference there. The catalog corrections and `mana_restored` add further expected differences on matches with the affected items and abilities.
 
