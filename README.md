@@ -194,7 +194,7 @@ scoreboard `m_fStuns` total.
 
 ## Validation
 
-Parity was checked against `odota-cli` v0.2.1 on five modern replays. Every field matched exactly for v0.5.0. Later catalog corrections and the `mana_restored` extension intentionally differ; `docs/accuracy.md` lists the known differences.
+Parity was checked against `odota-cli` v0.2.1 on five modern replays. Every field matched exactly for v0.5.0. Later catalog corrections, `mana_restored`, and client-sourced `gold_lost`/`tower_damage` intentionally differ; `docs/accuracy.md` lists the known differences.
 
 The parity harness is `tests/replay/parity_test.go`. It expects the external
 corpus (`MANTA_REPLAY_DIR`, default `../../../replays`) with `<id>.dem` and

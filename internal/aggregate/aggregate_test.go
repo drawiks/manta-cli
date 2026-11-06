@@ -130,6 +130,51 @@ func TestGoldLostUsesClientField(t *testing.T) {
 	}
 }
 
+func TestTowerDamageUsesClientField(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		info events.PlayerInfo
+		want int
+	}{
+		{
+			name: "client field wins",
+			info: events.PlayerInfo{
+				Slot:           0,
+				Hero:           "npc_dota_hero_axe",
+				Team:           "radiant",
+				TowerDamage:    900,
+				HasTowerDamage: true,
+			},
+			want: 900,
+		},
+		{
+			name: "combat log fallback",
+			info: events.PlayerInfo{
+				Slot: 0,
+				Hero: "npc_dota_hero_axe",
+				Team: "radiant",
+			},
+			want: 500,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := New()
+			a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{tc.info}})
+			a.Slot(events.Slot{Slot: 0, Team: tc.info.Team, Hero: tc.info.Hero})
+			a.Combat(events.Combat{
+				Type:         events.CombatDamage,
+				AttackerName: tc.info.Hero,
+				TargetName:   "npc_dota_goodguys_tower1_mid",
+				AttackerHero: true,
+				Value:        500,
+			})
+			if got := a.Result().Players[0].TowerDamage; got != tc.want {
+				t.Errorf("tower_damage = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSaveAndPurgeClassification(t *testing.T) {
 	a := New()
 	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{

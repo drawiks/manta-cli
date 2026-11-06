@@ -33,7 +33,7 @@ Cancellation cannot interrupt an `io.Reader` whose `Read` is already blocked. Us
 
 `manta.Match`, `manta.Player` and `manta.SourceEntry` are aliases for `stats.Match`, `stats.Player` and `stats.SourceEntry`.
 
-The `Match` JSON encoding is the odota-cli match object plus the `mana_restored` extension. The schema is [`schema/match.schema.json`](../schema/match.schema.json). `Players` is ordered by `player_id`. Source arrays are omitted when empty and are sorted deterministically. `position` and `lane` are omitted when there are not enough position samples.
+The `Match` JSON encoding is the odota-cli match object plus the `mana_restored` extension and client-sourced `gold_lost` and `tower_damage`. The schema is [`schema/match.schema.json`](../schema/match.schema.json). `Players` is ordered by `player_id`. Source arrays are omitted when empty and are sorted deterministically. `position` and `lane` are omitted when there are not enough position samples.
 
 Field documentation lives in the `stats` package.
 

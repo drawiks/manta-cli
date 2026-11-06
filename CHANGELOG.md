@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
+## Unreleased
+
+### Fixed
+
+- `tower_damage` now uses the game's `m_flTowerDamage` counter when present, matching client and OpenDota values.
+
 ## 0.5.7 - 2026-11-04
 
 ### Fixed

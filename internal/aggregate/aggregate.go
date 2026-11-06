@@ -640,7 +640,12 @@ func (a *Aggregator) Result() *stats.Match {
 		mp.ManaRestored = a.manaRestored[hk]
 		mp.HeroDamage = a.heroDamageByAttacker[hk]
 		mp.DamageTaken = a.damageTakenByTarget[hk]
-		mp.TowerDamage = a.towerDamageByAttacker[hk]
+		if p.HasTowerDamage {
+			mp.TowerDamage = p.TowerDamage
+		} else {
+			// shortcut: combat-log fallback can miss ancient and illusion damage; remove when old replays without m_flTowerDamage no longer need support.
+			mp.TowerDamage = a.towerDamageByAttacker[hk]
+		}
 		mp.GoldSpentSmoke = a.goldSpentSmoke[hk]
 		mp.GoldSpentDust = a.goldSpentDust[hk]
 		if a.hasGoldLostBySlot[p.Slot] {

@@ -3,8 +3,8 @@ package stats
 // Match is the parsed statistics for one Dota 2 match.
 //
 // Its JSON encoding is the odota-cli match object plus the mana_restored
-// extension and the client-sourced gold_lost. The zero value is a match with
-// no players and zero values.
+// extension and the client-sourced gold_lost and tower_damage. The zero value
+// is a match with no players and zero values.
 type Match struct {
 	// MatchID is the Dota 2 match ID, or zero when the replay has none.
 	MatchID int64 `json:"match_id"`
@@ -63,7 +63,7 @@ type Player struct {
 	HeroDamage int `json:"hero_damage"`
 	// DamageTaken is the damage taken from heroes.
 	DamageTaken int `json:"damage_taken"`
-	// TowerDamage is the damage dealt to buildings.
+	// TowerDamage is the game's final building-damage counter.
 	TowerDamage int `json:"tower_damage"`
 	// TimeDead is the total time spent dead in seconds.
 	TimeDead float64 `json:"time_dead"`

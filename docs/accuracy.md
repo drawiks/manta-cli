@@ -1,16 +1,17 @@
 # Accuracy
 
-The output contract is the `odota-cli` match JSON plus the `mana_restored` extension and the client-sourced `gold_lost`. Validation uses five modern replays with a reference `.out.json` per match.
+The output contract is the `odota-cli` match JSON plus the `mana_restored` extension and client-sourced `gold_lost` and `tower_damage`. Validation uses five modern replays with a reference `.out.json` per match.
 
-The corpus covers identity, KDA, level, last hits, stuns, damage, healing, mana restoration, buffs, debuffs, positions, lanes, gold counters, first blood and courier kills. Fields are compared exactly except for the documented catalog corrections, the `mana_restored` extension and the client-sourced `gold_lost`.
+The corpus covers identity, KDA, level, last hits, stuns, damage, healing, mana restoration, buffs, debuffs, positions, lanes, gold counters, first blood and courier kills. Fields are compared exactly except for the documented catalog corrections, the `mana_restored` extension and client-sourced `gold_lost` and `tower_damage`.
 
 The interval is sampled after packet entities are applied. Sampling on the net tick sees the previous packet and leaves networth and death transitions one tick behind the reference.
 
 ## Client corrections
 
 - `gold_lost` comes from `m_vecDataTeam.<slot>.m_iGoldLostToDeath`, the game's actual total gold lost to deaths. It can be lower than the sum of `DOTA_COMBATLOG_GOLD` entries with reason 1 because only available unreliable gold is lost. The combat-log sum remains as a fallback for replays without the client field.
+- `tower_damage` comes from `m_vecDataTeam.<slot>.m_flTowerDamage`, the game's final building-damage counter. The combat-log sum remains as a fallback for replays without this field; it can miss damage to the Ancient and damage attributed to illusions or other sources.
 
-A sweep of 18 available replays (180 player rows) matched `m_iGoldLostToDeath` exactly.
+A sweep of 18 available replays (180 player rows) matched `m_iGoldLostToDeath` exactly. A sweep of 25 available replays (250 player rows) matched `m_flTowerDamage` exactly.
 
 ## Catalog corrections
 
@@ -34,11 +35,13 @@ A sweep of 18 available replays (180 player rows) matched `m_iGoldLostToDeath` e
 
 Known differences in the five-replay corpus:
 
-- `9048749977`: Hoodwink has `wind_waker` save duration 9 where the reference has 0; `gold_lost` differs for 7 players.
-- `9053590215`: `gold_lost` differs for 8 players.
-- `9064082159`: `gold_lost` differs for 8 players.
-- `9064911131`: `gold_lost` differs for 7 players.
-- `9065268582`: Oracle has `oracle_false_promise` save duration 59 where the reference has 0; the reference's 46 Purifying Flames purge applications are replaced by 2 Fortune's End ally purges. `gold_lost` differs for 9 players.
+- `9048749977`: Hoodwink has `wind_waker` save duration 9 where the reference has 0; `tower_damage` differs for 4 players and `gold_lost` for 7.
+- `9053590215`: `tower_damage` differs for 4 players; `gold_lost` differs for 8.
+- `9064082159`: `tower_damage` differs for 5 players; Huskar is 7,981 in the combat-log reference and 9,789 from the client. `gold_lost` differs for 8.
+- `9064911131`: `tower_damage` differs for 6 players; `gold_lost` differs for 7.
+- `9065268582`: Oracle has `oracle_false_promise` save duration 59 where the reference has 0; the reference's 46 Purifying Flames purge applications are replaced by 2 Fortune's End ally purges. `tower_damage` differs for 6 players; `gold_lost` differs for 9.
+
+On `9064082159`, Huskar's combat-log estimate is 7,981 while the client/OpenDota value is 9,789; the 1,808 difference is damage to the Ancient (`npc_dota_goodguys_fort`). The client counter also includes damage attributed to illusions and other sources.
 
 Undying is not present in the five-replay corpus, so the Tombstone Bunker correction adds no harness difference there. The catalog corrections and `mana_restored` add further expected differences on matches with the affected items and abilities.
 
