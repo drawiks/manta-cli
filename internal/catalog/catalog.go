@@ -393,7 +393,8 @@ func classifyFear(inf string) bool {
 		strings.Contains(l, "terror_wave") ||
 		strings.Contains(l, "aether_remnant") ||
 		strings.Contains(l, "will_o_wisp") ||
-		strings.Contains(l, "wheel_of_wonder")
+		strings.Contains(l, "wheel_of_wonder") ||
+		strings.Contains(l, "mesmerize")
 }
 
 func classifyRoot(inf string) bool {
