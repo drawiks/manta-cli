@@ -599,3 +599,32 @@ func BenchmarkAggregate(b *testing.B) {
 		a.Combat(events.Combat{Time: float64(i + 1), Type: events.CombatModifierRemove, AttackerName: "npc_dota_hero_dazzle", TargetName: "npc_dota_hero_axe", Inflictor: "modifier_naga_siren_ensnare", AttackerHero: true, TargetHero: true})
 	}
 }
+
+func TestReactiveTazerDisarmAttributedToTechies(t *testing.T) {
+	a := New()
+	a.Epilogue(events.Epilogue{Players: []events.PlayerInfo{
+		{Slot: 0, Hero: "npc_dota_hero_techies", Team: "dire"},
+		{Slot: 1, Hero: "npc_dota_hero_ember_spirit", Team: "dire"},
+		{Slot: 2, Hero: "npc_dota_hero_monkey_king", Team: "radiant"},
+	}})
+	for slot, team := range []string{"dire", "dire", "radiant"} {
+		a.Slot(events.Slot{Slot: slot, Team: team, Hero: a.roster[slot].Hero})
+	}
+	// Techies casts Reactive Tazer on Ember Spirit (ally).
+	a.Combat(events.Combat{Time: 10, Type: events.CombatModifierAdd, AttackerName: "npc_dota_hero_techies", TargetName: "npc_dota_hero_ember_spirit", Inflictor: "modifier_techies_reactive_tazer", AttackerHero: true, TargetHero: true})
+	// Tazer triggers: Ember Spirit (bearer) disarms an enemy.
+	a.Combat(events.Combat{Time: 11, Type: events.CombatModifierAdd, AttackerName: "npc_dota_hero_ember_spirit", TargetName: "npc_dota_hero_monkey_king", Inflictor: "modifier_techies_reactive_tazer_disarmed", AttackerHero: true, TargetHero: true})
+	a.Combat(events.Combat{Time: 18, Type: events.CombatModifierRemove, AttackerName: "npc_dota_hero_ember_spirit", TargetName: "npc_dota_hero_monkey_king", Inflictor: "modifier_techies_reactive_tazer_disarmed", AttackerHero: true, TargetHero: true})
+	// Tazer removed.
+	a.Combat(events.Combat{Time: 15, Type: events.CombatModifierRemove, AttackerName: "npc_dota_hero_techies", TargetName: "npc_dota_hero_ember_spirit", Inflictor: "modifier_techies_reactive_tazer", AttackerHero: true, TargetHero: true})
+
+	res := a.Result()
+	techies := res.Players[0]
+	ember := res.Players[1]
+	if techies.DisarmDuration != 7 {
+		t.Errorf("techies disarm_duration = %v, want 7", techies.DisarmDuration)
+	}
+	if ember.DisarmDuration != 0 {
+		t.Errorf("ember disarm_duration = %v, want 0", ember.DisarmDuration)
+	}
+}

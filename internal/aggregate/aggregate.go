@@ -73,6 +73,7 @@ type Aggregator struct {
 	purgeCounts   map[srcKey]int
 	enemyMods     map[string]map[string]int
 	healsByTarget map[string][]healActive
+	tazerByBearer map[string]string
 	shardAt       map[string]int
 	talents       map[talentKey]int
 	durations     [catalog.KindCount]map[srcKey]float64
@@ -111,6 +112,7 @@ func New() *Aggregator {
 		purgeCounts:           map[srcKey]int{},
 		enemyMods:             map[string]map[string]int{},
 		healsByTarget:         map[string][]healActive{},
+		tazerByBearer:         map[string]string{},
 		shardAt:               map[string]int{},
 		talents:               map[talentKey]int{},
 		goldSpentSmoke:        map[string]int{},
@@ -363,6 +365,18 @@ func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 	if attacker == target {
 		return
 	}
+	// Track Reactive Tazer caster so its disarm is attributed to Techies,
+	// not to the bearer.
+	if inf == "modifier_techies_reactive_tazer" && add {
+		a.tazerByBearer[target] = attacker
+	}
+	// Resolve disarm attacker to the tazer caster.
+	pushAttacker := attacker
+	if strings.Contains(inf, "reactive_tazer_disarmed") {
+		if caster, ok := a.tazerByBearer[attacker]; ok {
+			pushAttacker = caster
+		}
+	}
 	a.trackEnemyModifier(ev, add)
 	c := a.classify(inf)
 	if add {
@@ -371,8 +385,8 @@ func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 		}
 		switch c.Kind {
 		case catalog.KindBreak, catalog.KindFear, catalog.KindRoot, catalog.KindLeash, catalog.KindTrap, catalog.KindTaunt, catalog.KindSilence, catalog.KindDisarm:
-			if !a.heroIsAlly(attacker, target) {
-				a.push(c.Kind, attacker, target, c.Clean, "", ev.Time)
+			if !a.heroIsAlly(pushAttacker, target) {
+				a.push(c.Kind, pushAttacker, target, c.Clean, "", ev.Time)
 			}
 		case catalog.KindHeal:
 			a.healsByTarget[target] = append(a.healsByTarget[target], healActive{Attacker: attacker, Clean: c.Clean, AddTime: ev.Time})
@@ -389,8 +403,8 @@ func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 	}
 	switch c.Kind {
 	case catalog.KindBreak, catalog.KindFear, catalog.KindRoot, catalog.KindLeash, catalog.KindTrap, catalog.KindTaunt, catalog.KindSilence, catalog.KindDisarm:
-		if !a.heroIsAlly(attacker, target) {
-			a.popDuration(c.Kind, attacker, target, c.Clean, ev.Time)
+		if !a.heroIsAlly(pushAttacker, target) {
+			a.popDuration(c.Kind, pushAttacker, target, c.Clean, ev.Time)
 		}
 	case catalog.KindHeal:
 		a.removeHealActive(target, attacker, c.Clean)
@@ -399,8 +413,8 @@ func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 			a.popBuff(attacker, target, c.Clean, ev.Time)
 		}
 	}
-	if catalog.IsStunBucket(inf, ev.StunDuration) && !a.heroIsAlly(attacker, target) && ev.AttackerHero {
-		a.popDuration(catalog.KindStun, attacker, target, c.Clean, ev.Time)
+	if catalog.IsStunBucket(inf, ev.StunDuration) && !a.heroIsAlly(pushAttacker, target) && ev.AttackerHero {
+		a.popDuration(catalog.KindStun, pushAttacker, target, c.Clean, ev.Time)
 	}
 }
 

@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
+## 0.7.1 - 2026-11-08
+
+### Fixed
+
+- Reactive Tazer disarm is now attributed to Techies (the caster) instead of
+  the bearer.
+
 ## 0.7.0 - 2026-11-08
 
 ### Changed
