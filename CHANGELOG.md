@@ -2,7 +2,13 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
-## Unreleased
+## 0.6.0 - 2026-11-08
+
+### Changed
+
+- `healing` is now the single healing total, including abilities, items and
+  heal-over-time ticks. `heal_duration`, `heal_value` and `heal_sources` were
+  removed from the player JSON and the public `stats.Player` type.
 
 ### Fixed
 

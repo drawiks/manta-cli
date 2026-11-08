@@ -66,8 +66,8 @@ func TestAggregateCombatAndIntervals(t *testing.T) {
 	if dazzle.BuffDuration != 5 || len(dazzle.BuffSources) != 1 || dazzle.BuffSources[0].Duration != 5 {
 		t.Errorf("dazzle buffs = %+v", dazzle.BuffSources)
 	}
-	if dazzle.Healing != 150 || dazzle.HealValue != 50 || len(dazzle.HealSources) != 1 {
-		t.Errorf("dazzle heals = healing %d value %v sources %+v", dazzle.Healing, dazzle.HealValue, dazzle.HealSources)
+	if dazzle.Healing != 150 {
+		t.Errorf("dazzle heals = healing %d", dazzle.Healing)
 	}
 	if dazzle.GoldSpentSmoke != 50 || dazzle.GoldSpentDust != 80 || dazzle.CourierKills != 1 {
 		t.Errorf("dazzle purchases = smoke %d dust %d couriers %d", dazzle.GoldSpentSmoke, dazzle.GoldSpentDust, dazzle.CourierKills)

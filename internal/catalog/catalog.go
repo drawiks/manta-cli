@@ -231,13 +231,6 @@ var PurgeTalents = map[string]bool{
 	"special_bonus_unique_ringmaster_the_box_strong_dispel_and_flying": true,
 }
 
-var InstantHealItems = map[string]bool{
-	"item_holy_locket":     true,
-	"item_famango":         true,
-	"item_great_famango":   true,
-	"item_greater_famango": true,
-}
-
 var ItemWardCosts = map[string]int{
 	"item_smoke_of_deceit": 50,
 	"item_dust":            80,

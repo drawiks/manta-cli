@@ -35,11 +35,6 @@ type activeMod struct {
 	AddTime   int
 }
 
-type healAgg struct {
-	Duration float64
-	Value    float64
-}
-
 type healActive struct {
 	Attacker string
 	Clean    string
@@ -77,7 +72,6 @@ type Aggregator struct {
 
 	stunSources   map[srcKey]float64
 	buffSources   map[buffKey]float64
-	healSources   map[srcKey]healAgg
 	purgeCounts   map[srcKey]int
 	enemyMods     map[string]map[string]int
 	healsByTarget map[string][]healActive
@@ -117,7 +111,6 @@ func New() *Aggregator {
 		towerDamageByAttacker: map[string]int{},
 		stunSources:           map[srcKey]float64{},
 		buffSources:           map[buffKey]float64{},
-		healSources:           map[srcKey]healAgg{},
 		purgeCounts:           map[srcKey]int{},
 		enemyMods:             map[string]map[string]int{},
 		healsByTarget:         map[string][]healActive{},
@@ -248,12 +241,6 @@ func (a *Aggregator) onHeal(ev events.Combat) {
 		return
 	}
 	a.healingByAttacker[catalog.HeroKey(attacker)] += ev.Value
-	if catalog.InstantHealItems[ev.Inflictor] {
-		sk := srcKey{catalog.HeroKey(attacker), ev.Inflictor}
-		agg := a.healSources[sk]
-		agg.Value += float64(ev.Value)
-		a.healSources[sk] = agg
-	}
 }
 
 func (a *Aggregator) healTick(target string, ev events.Combat) {
@@ -275,10 +262,6 @@ func (a *Aggregator) healTick(target string, ev events.Combat) {
 	}
 	hk := catalog.HeroKey(best.Attacker)
 	a.healingByAttacker[hk] += ev.Value
-	sk := srcKey{hk, best.Clean}
-	agg := a.healSources[sk]
-	agg.Value += float64(ev.Value)
-	a.healSources[sk] = agg
 }
 
 func (a *Aggregator) removeHealActive(target, attacker, clean string) {
@@ -317,24 +300,6 @@ func (a *Aggregator) popDuration(kind catalog.ModKind, attacker, target, clean s
 			m[srcKey{catalog.HeroKey(attacker), clean}] += d
 		}
 		a.active[kind][k] = append(list[:i], list[i+1:]...)
-		return
-	}
-}
-
-func (a *Aggregator) popHeal(attacker, target, clean string, t int) {
-	k := modKey{attacker, target, clean}
-	list := a.active[catalog.KindHeal][k]
-	for i := len(list) - 1; i >= 0; i-- {
-		if list[i].Inflictor != clean {
-			continue
-		}
-		if d := float64(t - list[i].AddTime); d > 0 {
-			sk := srcKey{catalog.HeroKey(attacker), clean}
-			agg := a.healSources[sk]
-			agg.Duration += d
-			a.healSources[sk] = agg
-		}
-		a.active[catalog.KindHeal][k] = append(list[:i], list[i+1:]...)
 		return
 	}
 }
@@ -413,7 +378,6 @@ func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 				a.push(c.Kind, attacker, target, c.Clean, "", ev.Time)
 			}
 		case catalog.KindHeal:
-			a.push(catalog.KindHeal, attacker, target, c.Clean, "", ev.Time)
 			a.healsByTarget[target] = append(a.healsByTarget[target], healActive{Attacker: attacker, Clean: c.Clean, AddTime: ev.Time})
 		case catalog.KindBuff:
 			if !catalog.TrackedBuff[c.Category] || !a.heroIsAlly(attacker, target) {
@@ -432,7 +396,6 @@ func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 			a.popDuration(c.Kind, attacker, target, c.Clean, ev.Time)
 		}
 	case catalog.KindHeal:
-		a.popHeal(attacker, target, c.Clean, ev.Time)
 		a.removeHealActive(target, attacker, c.Clean)
 	case catalog.KindBuff:
 		if a.heroIsAlly(attacker, target) {
@@ -718,33 +681,15 @@ func (a *Aggregator) Result() *stats.Match {
 			}
 		}
 	}
-	for k, agg := range a.healSources {
-		for _, mp := range byHero[k.Attacker] {
-			entry := stats.SourceEntry{Inflictor: k.Inflictor, Category: "heal"}
-			if agg.Duration > 0 {
-				entry.Duration = math.Round(agg.Duration)
-				mp.HealDuration += agg.Duration
-			}
-			if agg.Value > 0 {
-				entry.Value = math.Round(agg.Value)
-				mp.HealValue += agg.Value
-			}
-			mp.HealSources = append(mp.HealSources, entry)
-		}
-	}
-
 	for i := range a.m.Players {
 		mp := &a.m.Players[i]
 		sortSources(mp.StunSources)
 		sortSources(mp.BuffSources)
-		sortHealSources(mp.HealSources)
 		for _, s := range specs {
 			sortSources(*s.entries(mp))
 			*s.total(mp) = math.Round(*s.total(mp))
 		}
 		mp.BuffDuration = math.Round(mp.BuffDuration)
-		mp.HealDuration = math.Round(mp.HealDuration)
-		mp.HealValue = math.Round(mp.HealValue)
 	}
 
 	roleInputs := make([]roles.Input, 0, len(a.m.Players))
@@ -775,18 +720,6 @@ func sortSources(s []stats.SourceEntry) {
 			return s[i].Inflictor < s[j].Inflictor
 		}
 		return s[i].Category < s[j].Category
-	})
-}
-
-func sortHealSources(s []stats.SourceEntry) {
-	sort.Slice(s, func(i, j int) bool {
-		if s[i].Duration != s[j].Duration {
-			return s[i].Duration > s[j].Duration
-		}
-		if s[i].Value != s[j].Value {
-			return s[i].Value > s[j].Value
-		}
-		return s[i].Inflictor < s[j].Inflictor
 	})
 }
 

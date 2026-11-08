@@ -80,6 +80,9 @@ func TestParityWithOdotaCLI(t *testing.T) {
 		flatten(gotMap, "", gotFlat)
 		flatten(refMap, "", refFlat)
 		for k, want := range refFlat {
+			if removedHealingField(k) {
+				continue
+			}
 			have, ok := gotFlat[k]
 			if !ok {
 				t.Errorf("%s: missing field %s", id, k)
@@ -118,6 +121,14 @@ func flatten(v any, prefix string, out map[string]any) {
 	default:
 		out[prefix] = v
 	}
+}
+
+// removedHealingField reports fields that were intentionally dropped in v0.6.0:
+// `healing` is now the single healing total.
+func removedHealingField(k string) bool {
+	return strings.HasSuffix(k, ".heal_duration") ||
+		strings.HasSuffix(k, ".heal_value") ||
+		strings.Contains(k, ".heal_sources")
 }
 
 func itoa(i int) string {

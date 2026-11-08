@@ -55,7 +55,8 @@ type Player struct {
 	GPM int `json:"gpm"`
 	// XPM is experience per minute.
 	XPM int `json:"xpm"`
-	// Healing is the healing done to allies.
+	// Healing is the total healing done to allies, including abilities, items
+	// and heal-over-time ticks.
 	Healing int `json:"healing"`
 	// ManaRestored is the mana restored to allied heroes, including Bottle healing over time.
 	ManaRestored int `json:"mana_restored"`
@@ -117,12 +118,6 @@ type Player struct {
 	// DisarmSources breaks DisarmDuration down by inflictor. It is omitted
 	// when empty.
 	DisarmSources []SourceEntry `json:"disarm_sources,omitempty"`
-	// HealDuration is the total duration of heal-over-time effects in seconds.
-	HealDuration float64 `json:"heal_duration"`
-	// HealValue is the healing amount from heal-over-time and instant heals.
-	HealValue float64 `json:"heal_value"`
-	// HealSources breaks healing down by inflictor. It is omitted when empty.
-	HealSources []SourceEntry `json:"heal_sources,omitempty"`
 	// GoldSpentWards is the gold spent on wards.
 	GoldSpentWards int `json:"gold_spent_wards"`
 	// GoldSpentSmoke is the gold spent on Smoke of Deceit.

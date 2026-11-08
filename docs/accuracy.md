@@ -47,6 +47,12 @@ Undying is not present in the five-replay corpus, so the Tombstone Bunker correc
 
 `make parity` reports these differences. Do not add a tolerance; update or rebase the references, or add an explicit divergence allowlist, before claiming exact parity again.
 
+## Removed fields
+
+- `healing` is now the single healing total. `heal_duration`, `heal_value` and
+  `heal_sources` are no longer emitted. This intentionally differs from
+  `odota-cli`; the parity harness ignores those reference fields.
+
 ## Harness
 
 The parity harness is `tests/replay/parity_test.go`. It reads `MANTA_REPLAY_DIR` and skips when the corpus is absent. The corpus is not committed because the files are hundreds of megabytes.

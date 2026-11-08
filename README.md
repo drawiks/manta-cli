@@ -139,8 +139,6 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o man
       "silence_duration": 0,
       "break_duration": 0,
       "disarm_duration": 0,
-      "heal_duration": 0,
-      "heal_value": 0,
       "gold_spent_wards": 0,
       "gold_spent_smoke": 0,
       "gold_spent_dust": 0,
@@ -161,7 +159,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o man
 `position`/`lane` are omitted when the first 600 seconds do not contain enough
 position samples. `stun_sources`, `buff_sources`, `fear_sources`, `root_sources`,
 `leash_sources`, `trap_sources`, `taunt_sources`, `silence_sources`,
-`break_sources`, `disarm_sources` and `heal_sources` are omitted when empty.
+`break_sources` and `disarm_sources` are omitted when empty.
 
 ## Where the numbers come from
 
@@ -188,9 +186,9 @@ Everything is decoded from the replay by manta:
   `odota-cli`.
 
 Tracked effect semantics follow `odota-cli`: buffs/debuffs are paired
-ADD→REMOVE using event times, self-cast modifiers are ignored, heals are ally
-HEAL events plus HoT ticks attributed to the caster, and `stun_duration` is the
-scoreboard `m_fStuns` total.
+ADD→REMOVE using event times, self-cast modifiers are ignored, `healing` is the
+total of ally HEAL events plus HoT ticks attributed to the caster, and
+`stun_duration` is the scoreboard `m_fStuns` total.
 
 ## Validation
 
