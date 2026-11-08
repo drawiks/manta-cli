@@ -80,7 +80,7 @@ func TestParityWithOdotaCLI(t *testing.T) {
 		flatten(gotMap, "", gotFlat)
 		flatten(refMap, "", refFlat)
 		for k, want := range refFlat {
-			if removedHealingField(k) {
+			if removedField(k) {
 				continue
 			}
 			have, ok := gotFlat[k]
@@ -123,12 +123,20 @@ func flatten(v any, prefix string, out map[string]any) {
 	}
 }
 
-// removedHealingField reports fields that were intentionally dropped in v0.6.0:
-// `healing` is now the single healing total.
-func removedHealingField(k string) bool {
-	return strings.HasSuffix(k, ".heal_duration") ||
+// removedField reports fields that intentionally differ from the odota-cli reference:
+// healing is now the single healing total, and stun_duration is derived from
+// combat-log modifier events instead of the scoreboard m_fStuns.
+func removedField(k string) bool {
+	if strings.HasSuffix(k, ".heal_duration") ||
 		strings.HasSuffix(k, ".heal_value") ||
-		strings.Contains(k, ".heal_sources")
+		strings.Contains(k, ".heal_sources") {
+		return true
+	}
+	if strings.HasSuffix(k, ".stun_duration") ||
+		strings.Contains(k, ".stun_sources") {
+		return true
+	}
+	return false
 }
 
 func itoa(i int) string {

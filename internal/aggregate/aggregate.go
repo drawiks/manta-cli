@@ -3,7 +3,6 @@ package aggregate
 import (
 	"math"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/drawiks/manta-cli/internal/catalog"
@@ -32,13 +31,13 @@ type modKey struct {
 type activeMod struct {
 	Inflictor string
 	Category  string
-	AddTime   int
+	AddTime   float64
 }
 
 type healActive struct {
 	Attacker string
 	Clean    string
-	AddTime  int
+	AddTime  float64
 }
 
 type talentKey struct {
@@ -70,7 +69,6 @@ type Aggregator struct {
 	damageTakenByTarget   map[string]int
 	towerDamageByAttacker map[string]int
 
-	stunSources   map[srcKey]float64
 	buffSources   map[buffKey]float64
 	purgeCounts   map[srcKey]int
 	enemyMods     map[string]map[string]int
@@ -109,7 +107,6 @@ func New() *Aggregator {
 		heroDamageByAttacker:  map[string]int{},
 		damageTakenByTarget:   map[string]int{},
 		towerDamageByAttacker: map[string]int{},
-		stunSources:           map[srcKey]float64{},
 		buffSources:           map[buffKey]float64{},
 		purgeCounts:           map[srcKey]int{},
 		enemyMods:             map[string]map[string]int{},
@@ -274,7 +271,7 @@ func (a *Aggregator) removeHealActive(target, attacker, clean string) {
 	}
 }
 
-func (a *Aggregator) push(kind catalog.ModKind, attacker, target, clean, category string, t int) {
+func (a *Aggregator) push(kind catalog.ModKind, attacker, target, clean, category string, t float64) {
 	k := modKey{attacker, target, clean}
 	m := a.active[kind]
 	if m == nil {
@@ -284,14 +281,14 @@ func (a *Aggregator) push(kind catalog.ModKind, attacker, target, clean, categor
 	m[k] = append(m[k], activeMod{Inflictor: clean, Category: category, AddTime: t})
 }
 
-func (a *Aggregator) popDuration(kind catalog.ModKind, attacker, target, clean string, t int) {
+func (a *Aggregator) popDuration(kind catalog.ModKind, attacker, target, clean string, t float64) {
 	k := modKey{attacker, target, clean}
 	list := a.active[kind][k]
 	for i := len(list) - 1; i >= 0; i-- {
 		if list[i].Inflictor != clean {
 			continue
 		}
-		if d := float64(t - list[i].AddTime); d > 0 {
+		if d := t - list[i].AddTime; d > 0 {
 			m := a.durations[kind]
 			if m == nil {
 				m = map[srcKey]float64{}
@@ -304,14 +301,14 @@ func (a *Aggregator) popDuration(kind catalog.ModKind, attacker, target, clean s
 	}
 }
 
-func (a *Aggregator) popBuff(attacker, target, clean string, t int) {
+func (a *Aggregator) popBuff(attacker, target, clean string, t float64) {
 	k := modKey{attacker, target, clean}
 	list := a.active[catalog.KindBuff][k]
 	for i := len(list) - 1; i >= 0; i-- {
 		if list[i].Inflictor != clean {
 			continue
 		}
-		if d := float64(t - list[i].AddTime); d > 0 {
+		if d := t - list[i].AddTime; d > 0 {
 			a.buffSources[buffKey{catalog.HeroKey(attacker), list[i].Category, clean}] += d
 		}
 		a.active[catalog.KindBuff][k] = append(list[:i], list[i+1:]...)
@@ -369,7 +366,7 @@ func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 	a.trackEnemyModifier(ev, add)
 	c := a.classify(inf)
 	if add {
-		if c.Purge && a.heroIsAlly(attacker, target) && a.gateOK(c.Gate, c.Talent, attacker, ev.Time) {
+		if c.Purge && a.heroIsAlly(attacker, target) && a.gateOK(c.Gate, c.Talent, attacker, int(ev.Time)) {
 			a.purgeCounts[srcKey{catalog.HeroKey(attacker), c.Clean}]++
 		}
 		switch c.Kind {
@@ -384,9 +381,9 @@ func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 				return
 			}
 			a.push(catalog.KindBuff, attacker, target, c.Clean, c.Category, ev.Time)
-			if ev.StunDuration > 0 {
-				a.stunSources[srcKey{catalog.HeroKey(attacker), c.Clean}] += ev.StunDuration
-			}
+		}
+		if catalog.IsStunBucket(inf, ev.StunDuration) && !a.heroIsAlly(attacker, target) && ev.AttackerHero {
+			a.push(catalog.KindStun, attacker, target, c.Clean, "", ev.Time)
 		}
 		return
 	}
@@ -402,6 +399,9 @@ func (a *Aggregator) onModifier(ev events.Combat, add bool) {
 			a.popBuff(attacker, target, c.Clean, ev.Time)
 		}
 	}
+	if catalog.IsStunBucket(inf, ev.StunDuration) && !a.heroIsAlly(attacker, target) && ev.AttackerHero {
+		a.popDuration(catalog.KindStun, attacker, target, c.Clean, ev.Time)
+	}
 }
 
 func (a *Aggregator) onPurchase(ev events.Combat) {
@@ -411,7 +411,7 @@ func (a *Aggregator) onPurchase(ev events.Combat) {
 	if ev.ValueName == "item_aghanims_shard" && ev.TargetName != "" {
 		hk := catalog.HeroKey(ev.TargetName)
 		if _, ok := a.shardAt[hk]; !ok {
-			a.shardAt[hk] = ev.Time
+			a.shardAt[hk] = int(ev.Time)
 		}
 		return
 	}
@@ -473,7 +473,7 @@ func (a *Aggregator) onAbility(ev events.Combat) {
 		return
 	}
 	if talent, ok := catalog.TalentGlobalAbilities[inf]; ok {
-		if a.gateOK(catalog.GateTalent, talent, ev.AttackerName, ev.Time) {
+		if a.gateOK(catalog.GateTalent, talent, ev.AttackerName, int(ev.Time)) {
 			a.purgeCounts[srcKey{hk, catalog.CanonicalName(inf)}]++
 		}
 		return
@@ -481,7 +481,7 @@ func (a *Aggregator) onAbility(ev events.Combat) {
 	if talent, ok := catalog.TalentPurgeAbilities[inf]; ok &&
 		ev.TargetHero && !ev.TargetIllusion &&
 		target != "" && ev.AttackerName != target && a.heroIsAlly(ev.AttackerName, target) &&
-		a.gateOK(catalog.GateTalent, talent, ev.AttackerName, ev.Time) {
+		a.gateOK(catalog.GateTalent, talent, ev.AttackerName, int(ev.Time)) {
 		a.purgeCounts[srcKey{hk, catalog.CanonicalName(inf)}]++
 	}
 }
@@ -582,7 +582,6 @@ func (a *Aggregator) Result() *stats.Match {
 			mp.Level = iv.Level
 			mp.LastHits = iv.LastHits
 			mp.Networth = iv.Networth
-			mp.StunDuration = shortestFloat32(iv.Stuns)
 			mp.CampsStacked = iv.CampsStacked
 			mp.CreepsStacked = iv.CreepsStacked
 			mp.RunePickups = iv.RunePickups
@@ -625,13 +624,14 @@ func (a *Aggregator) Result() *stats.Match {
 		byHero[heroKeys[i]] = append(byHero[heroKeys[i]], &a.m.Players[i])
 	}
 
-	for k, v := range a.stunSources {
+	for k, v := range a.durations[catalog.KindStun] {
 		for _, mp := range byHero[k.Attacker] {
 			mp.StunSources = append(mp.StunSources, stats.SourceEntry{
 				Inflictor: k.Inflictor,
 				Category:  "stun",
-				Duration:  v,
+				Duration:  math.Round(v),
 			})
+			mp.StunDuration += v
 		}
 	}
 	for k, v := range a.buffSources {
@@ -690,6 +690,7 @@ func (a *Aggregator) Result() *stats.Match {
 			*s.total(mp) = math.Round(*s.total(mp))
 		}
 		mp.BuffDuration = math.Round(mp.BuffDuration)
+		mp.StunDuration = math.Round(mp.StunDuration)
 	}
 
 	roleInputs := make([]roles.Input, 0, len(a.m.Players))
@@ -721,9 +722,4 @@ func sortSources(s []stats.SourceEntry) {
 		}
 		return s[i].Category < s[j].Category
 	})
-}
-
-func shortestFloat32(v float64) float64 {
-	f, _ := strconv.ParseFloat(strconv.FormatFloat(v, 'g', -1, 32), 64)
-	return f
 }

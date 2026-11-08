@@ -188,7 +188,9 @@ Everything is decoded from the replay by manta:
 Tracked effect semantics follow `odota-cli`: buffs/debuffs are paired
 ADD→REMOVE using event times, self-cast modifiers are ignored, `healing` is the
 total of ally HEAL events plus HoT ticks attributed to the caster, and
-`stun_duration` is the scoreboard `m_fStuns` total.
+`stun_duration` is derived from combat-log modifier events (stun, hex, cyclone,
+sleep, banish); overlapping intervals on one target are attributed to the first
+source. It is not the scoreboard `m_fStuns` total.
 
 ## Validation
 

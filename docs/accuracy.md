@@ -53,6 +53,14 @@ Undying is not present in the five-replay corpus, so the Tombstone Bunker correc
   `heal_sources` are no longer emitted. This intentionally differs from
   `odota-cli`; the parity harness ignores those reference fields.
 
+## Stun rework (v0.6.0)
+
+- `stun_duration` is no longer the scoreboard `m_fStuns`. It is derived from
+  combat-log modifier events: stun, hex, cyclone, sleep and banish. Taunt, fear
+  and root remain in their own fields. Overlapping intervals on one target
+  within the stun bucket are attributed to the first source. This intentionally
+  differs from `odota-cli` and OpenDota.
+
 ## Harness
 
 The parity harness is `tests/replay/parity_test.go`. It reads `MANTA_REPLAY_DIR` and skips when the corpus is absent. The corpus is not committed because the files are hundreds of megabytes.

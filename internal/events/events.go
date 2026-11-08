@@ -68,7 +68,7 @@ const (
 )
 
 type Combat struct {
-	Time             int
+	Time             float64
 	Type             CombatType
 	AttackerName     string
 	TargetName       string

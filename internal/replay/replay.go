@@ -122,14 +122,14 @@ type slotInfo struct {
 }
 
 type pendingCombat struct {
-	rawTime int
+	rawTime float64
 	ev      events.Combat
 }
 
 type bottleRestore struct {
 	caster         string
 	target         string
-	last           int
+	last           float64
 	amount         float64
 	sawManaRestore bool
 }
@@ -490,13 +490,13 @@ func (st *replayState) sampleBottle() {
 	if len(st.bottle) == 0 || !st.startKnown {
 		return
 	}
-	now := st.currentTime() - st.gameStart
+	now := float64(st.currentTime() - st.gameStart)
 	for _, b := range st.bottle {
 		st.sampleBottleTarget(b, now)
 	}
 }
 
-func (st *replayState) sampleBottleTarget(b *bottleRestore, now int) {
+func (st *replayState) sampleBottleTarget(b *bottleRestore, now float64) {
 	if now <= b.last {
 		return
 	}
@@ -553,13 +553,13 @@ func (st *replayState) heroTeam(name string) (string, bool) {
 }
 
 func (st *replayState) handleCombat(e *dota.CMsgDOTACombatLogEntry) {
-	rawTime := int(math.Round(float64(e.GetTimestamp())))
-	st.lastCombatTime = rawTime
+	rawTime := float64(e.GetTimestamp())
+	st.lastCombatTime = int(math.Round(rawTime))
 	if e.GetType() == dota.DOTA_COMBATLOG_TYPES_DOTA_COMBATLOG_GAME_STATE {
 		switch e.GetValue() {
 		case 5:
 			if !st.startKnown {
-				st.gameStart = rawTime
+				st.gameStart = int(math.Round(rawTime))
 				st.startKnown = true
 				st.flushIntervals()
 				st.flushPending()
@@ -582,7 +582,7 @@ func (st *replayState) handleCombat(e *dota.CMsgDOTACombatLogEntry) {
 		st.pending = append(st.pending, pendingCombat{rawTime: rawTime, ev: ev})
 		return
 	}
-	ev.Time = rawTime - st.gameStart
+	ev.Time = rawTime - float64(st.gameStart)
 	if ev.Type == events.CombatManaRestore {
 		st.markBottleManaRestore(ev)
 	}
@@ -689,7 +689,7 @@ func (st *replayState) flushPending() {
 	}
 	for _, p := range st.pending {
 		ev := p.ev
-		ev.Time = p.rawTime - st.gameStart
+		ev.Time = p.rawTime - float64(st.gameStart)
 		st.handler.Combat(ev)
 	}
 	st.pending = nil
@@ -842,7 +842,7 @@ func (st *replayState) scanStartingItems(t int) {
 			found = true
 			item := st.entityName(h)
 			if _, ok := catalog.ItemWardCosts[item]; ok {
-				st.handler.Combat(events.Combat{Time: t, Type: events.CombatPurchase, ValueName: item, TargetName: heroName})
+				st.handler.Combat(events.Combat{Time: float64(t), Type: events.CombatPurchase, ValueName: item, TargetName: heroName})
 			}
 		}
 		if found {

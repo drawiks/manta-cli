@@ -250,6 +250,7 @@ const (
 	KindDisarm
 	KindHeal
 	KindBuff
+	KindStun
 	KindCount
 )
 
@@ -285,6 +286,42 @@ func CanonicalName(clean string) string {
 		clean = strings.TrimSuffix(clean, s)
 	}
 	return clean
+}
+
+// IsStunBucket reports whether a modifier contributes to stun_duration:
+// any modifier with a positive stun_duration that is not a taunt, fear or root.
+func IsStunBucket(inf string, stunDuration float64) bool {
+	if stunDuration <= 0 {
+		return false
+	}
+	l := strings.ToLower(inf)
+	// explicitly excluded stuns
+	switch {
+	case strings.Contains(l, "knockback"):
+		return false
+	case strings.Contains(l, "flaming_lasso_damage"):
+		return false
+	case strings.Contains(l, "roshan_grab"):
+		return false
+	case strings.Contains(l, "planar_pocket"):
+		return false
+	case l == "modifier_magnataur_reverse_polarity":
+		return false
+	case l == "modifier_pangolier_gyroshell_bounce":
+		return false
+	case l == "modifier_pudge_dismember_pull":
+		return false
+	}
+	if classifyTaunt(inf) {
+		return false
+	}
+	if classifyFear(inf) {
+		return false
+	}
+	if classifyRoot(inf) {
+		return false
+	}
+	return true
 }
 
 func ClassifyModifier(inf string) ModClass {
@@ -369,7 +406,8 @@ func classifyRoot(inf string) bool {
 		strings.Contains(l, "entangle") ||
 		strings.Contains(l, "fortune") ||
 		strings.Contains(l, "spinnerssnare") ||
-		strings.Contains(l, "atos")
+		strings.Contains(l, "atos") ||
+		strings.Contains(l, "bramble")
 }
 
 func classifyLeash(inf string) bool {

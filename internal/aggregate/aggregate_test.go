@@ -60,8 +60,8 @@ func TestAggregateCombatAndIntervals(t *testing.T) {
 	if dazzle.Hero != "dazzle" || dazzle.HeroID != 50 || dazzle.Team != "radiant" {
 		t.Errorf("dazzle identity = %+v", dazzle)
 	}
-	if dazzle.GPM != 600 || dazzle.XPM != 1200 || dazzle.StunDuration != 12.5 {
-		t.Errorf("dazzle interval stats = gpm %d xpm %d stun %v", dazzle.GPM, dazzle.XPM, dazzle.StunDuration)
+	if dazzle.GPM != 600 || dazzle.XPM != 1200 {
+		t.Errorf("dazzle interval stats = gpm %d xpm %d", dazzle.GPM, dazzle.XPM)
 	}
 	if dazzle.BuffDuration != 5 || len(dazzle.BuffSources) != 1 || dazzle.BuffSources[0].Duration != 5 {
 		t.Errorf("dazzle buffs = %+v", dazzle.BuffSources)
@@ -193,7 +193,7 @@ func TestSaveAndPurgeClassification(t *testing.T) {
 			kind = events.CombatModifierAdd
 		}
 		a.Combat(events.Combat{
-			Time:         at,
+			Time:         float64(at),
 			Type:         kind,
 			AttackerName: "npc_dota_hero_oracle",
 			TargetName:   "npc_dota_hero_lion",
@@ -259,7 +259,7 @@ func TestNewBuffSources(t *testing.T) {
 			kind = events.CombatModifierAdd
 		}
 		a.Combat(events.Combat{
-			Time:         at,
+			Time:         float64(at),
 			Type:         kind,
 			AttackerName: "npc_dota_hero_oracle",
 			TargetName:   "npc_dota_hero_lion",
@@ -440,7 +440,7 @@ func TestOraclePurgeSources(t *testing.T) {
 	}
 	fortunesEnd := func(at int, target string) {
 		a.Combat(events.Combat{
-			Time:         at,
+			Time:         float64(at),
 			Type:         events.CombatAbility,
 			AttackerName: "npc_dota_hero_oracle",
 			TargetName:   target,
@@ -455,7 +455,7 @@ func TestOraclePurgeSources(t *testing.T) {
 			typ = events.CombatModifierAdd
 		}
 		a.Combat(events.Combat{
-			Time:         at,
+			Time:         float64(at),
 			Type:         typ,
 			AttackerName: attacker,
 			TargetName:   target,
@@ -548,7 +548,7 @@ func TestUndyingTombstoneBunkerSave(t *testing.T) {
 			kind = events.CombatModifierAdd
 		}
 		a.Combat(events.Combat{
-			Time:         at,
+			Time:         float64(at),
 			Type:         kind,
 			AttackerName: "npc_dota_hero_undying",
 			TargetName:   target,
@@ -595,7 +595,7 @@ func BenchmarkAggregate(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		a.Interval(events.Interval{Slot: 0, Time: i, HasLifeState: true, Gold: i, XP: i, Networth: i})
-		a.Combat(events.Combat{Time: i, Type: events.CombatModifierAdd, AttackerName: "npc_dota_hero_dazzle", TargetName: "npc_dota_hero_axe", Inflictor: "modifier_naga_siren_ensnare", AttackerHero: true, TargetHero: true})
-		a.Combat(events.Combat{Time: i + 1, Type: events.CombatModifierRemove, AttackerName: "npc_dota_hero_dazzle", TargetName: "npc_dota_hero_axe", Inflictor: "modifier_naga_siren_ensnare", AttackerHero: true, TargetHero: true})
+		a.Combat(events.Combat{Time: float64(i), Type: events.CombatModifierAdd, AttackerName: "npc_dota_hero_dazzle", TargetName: "npc_dota_hero_axe", Inflictor: "modifier_naga_siren_ensnare", AttackerHero: true, TargetHero: true})
+		a.Combat(events.Combat{Time: float64(i + 1), Type: events.CombatModifierRemove, AttackerName: "npc_dota_hero_dazzle", TargetName: "npc_dota_hero_axe", Inflictor: "modifier_naga_siren_ensnare", AttackerHero: true, TargetHero: true})
 	}
 }
