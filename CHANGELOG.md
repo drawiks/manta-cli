@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses Semantic Versioning.
 
+## 0.7.0 - 2026-11-08
+
+### Changed
+
+- `stun_duration` is now derived from combat-log modifier events (stun, hex,
+  cyclone, sleep, banish) instead of the scoreboard `m_fStuns`. Taunt, fear and
+  root remain separate. Overlapping intervals on one target are attributed to
+  the first source.
+
 ## 0.6.0 - 2026-11-08
 
 ### Changed
@@ -9,10 +18,6 @@ All notable changes to this project are documented here. The format follows Keep
 - `healing` is now the single healing total, including abilities, items and
   heal-over-time ticks. `heal_duration`, `heal_value` and `heal_sources` were
   removed from the player JSON and the public `stats.Player` type.
-- `stun_duration` is now derived from combat-log modifier events (stun, hex,
-  cyclone, sleep, banish) instead of the scoreboard `m_fStuns`. Taunt, fear and
-  root remain separate. Overlapping intervals on one target are attributed to
-  the first source.
 
 ### Fixed
 
